@@ -124,13 +124,6 @@ export default function App() {
   const [editingMeal, setEditingMeal] = useState(null);
   const [editMealAmount, setEditMealAmount] = useState("");
   const [editNote, setEditNote] = useState("");
-  const [showQrLogin, setShowQrLogin] = useState(false);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const qrEmpId = params.get("emp") || params.get("empId");
-    if (qrEmpId) setEmpId(qrEmpId);
-  }, []);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -393,8 +386,6 @@ export default function App() {
     });
     return Object.values(map).sort((a, b) => b.totalEmployeePay - a.totalEmployeePay);
   }, [adminMonthRecords]);
-
-  const currentBaseUrl = window.location.origin + window.location.pathname;
 
   const markPaid = async (item) => {
     const pin = window.prompt(`請輸入管理員 PIN，確認 ${item.name} ${selectedMonth} 已收款`);
@@ -716,9 +707,6 @@ export default function App() {
                     <div style={styles.employeeFound}>
                       {matchedEmployee.name}｜{matchedEmployee.store || "未填店名"}
                     </div>
-                    <button style={styles.qrMiniBtn} onClick={() => setShowQrLogin(!showQrLogin)}>
-                      QRCode 登入
-                    </button>
                   </>
                 ) : empId.trim() ? (
                   <div style={styles.employeeNotFound}>找不到員工</div>
@@ -757,24 +745,6 @@ export default function App() {
                 <MetricSmall title="本月應繳多少" value={`${employeeMonthSummary.isPaid ? 0 : employeeMonthSummary.totalEmployeePay} 元`} danger />
               </div>
 
-              {showQrLogin ? (
-                <div style={styles.qrLoginBox}>
-                  <div>
-                    <div style={styles.qrTitle}>員工 QRCode 快速登入</div>
-                    <div style={styles.qrText}>把這個網址做成 QRCode，以後掃碼就會自動帶入工號。</div>
-                    <input
-                      style={styles.qrUrlInput}
-                      value={`${currentBaseUrl}?emp=${selectedEmpKey}`}
-                      readOnly
-                      onFocus={(e) => e.target.select()}
-                    />
-                  </div>
-                  <div style={styles.qrPlaceholder}>
-                    QR
-                    <span>可用 QRCode 工具產生</span>
-                  </div>
-                </div>
-              ) : null}
             </section>
           ) : null}
 
@@ -1642,61 +1612,6 @@ const styles = {
     padding: "6px 12px",
     fontWeight: 950,
   },
-  qrMiniBtn: {
-    marginTop: 8,
-    border: "1px solid #93c5fd",
-    background: "#eff6ff",
-    color: "#1d4ed8",
-    borderRadius: 10,
-    padding: "8px 12px",
-    fontWeight: 950,
-    cursor: "pointer",
-  },
-  qrLoginBox: {
-    marginTop: 16,
-    border: "1px dashed #93c5fd",
-    background: "#f8fbff",
-    borderRadius: 16,
-    padding: 16,
-    display: "grid",
-    gridTemplateColumns: "1fr 120px",
-    gap: 16,
-    alignItems: "center",
-  },
-  qrTitle: {
-    fontSize: 20,
-    fontWeight: 950,
-  },
-  qrText: {
-    marginTop: 6,
-    color: "#64748b",
-    fontWeight: 800,
-  },
-  qrUrlInput: {
-    width: "100%",
-    marginTop: 10,
-    minHeight: 44,
-    borderRadius: 10,
-    border: "1px solid #cbd5e1",
-    padding: "0 12px",
-    color: "#111827",
-    WebkitTextFillColor: "#111827",
-    fontWeight: 850,
-    boxSizing: "border-box",
-  },
-  qrPlaceholder: {
-    width: 110,
-    height: 110,
-    borderRadius: 12,
-    border: "2px solid #cbd5e1",
-    display: "grid",
-    placeItems: "center",
-    fontSize: 34,
-    fontWeight: 950,
-    color: "#334155",
-    background: "#fff",
-    textAlign: "center",
-  },
   storeSplitCard: {
     background: "#f8fafc",
     border: "1px solid #e2e8f0",
@@ -1826,7 +1741,6 @@ if (window.innerWidth <= 900) {
   styles.currencyText.display = "none";
   styles.dashboardGrid.gridTemplateColumns = "1fr";
   styles.personalSummaryGrid.gridTemplateColumns = "1fr";
-  styles.qrLoginBox.gridTemplateColumns = "1fr";
   styles.adminControlBar.flexDirection = "column";
   styles.adminSelect.width = "100%";
   styles.monthInput.width = "100%";
