@@ -4,6 +4,7 @@ import { signInAnonymously, onAuthStateChanged } from "firebase/auth";
 import { db, auth } from "./firebase";
 
 const ADMIN_PASSWORD = "8888";
+const ADMIN_DELETE_PIN = "1688";
 
 const formatTaipeiDateKey = (ts = Date.now()) => {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -123,6 +124,13 @@ export default function App() {
   const [editingMeal, setEditingMeal] = useState(null);
   const [editMealAmount, setEditMealAmount] = useState("");
   const [editNote, setEditNote] = useState("");
+  const [showQrLogin, setShowQrLogin] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const qrEmpId = params.get("emp") || params.get("empId");
+    if (qrEmpId) setEmpId(qrEmpId);
+  }, []);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -230,7 +238,7 @@ export default function App() {
 
   const todayMealList = useMemo(() => {
     return Object.values(mealRecords || {})
-      .filter((item) => item.dateKey === mealDate)
+      .filter((item) => item && item.dateKey === mealDate)
       .sort((a, b) => String(a.store || "").localeCompare(String(b.store || "")) || String(a.name || "").localeCompare(String(b.name || "")))
       .slice(0, 10);
   }, [mealRecords, mealDate]);
@@ -239,7 +247,7 @@ export default function App() {
     const map = {};
 
     Object.values(mealRecords || {})
-      .filter((item) => item.monthKey === selectedMonth)
+      .filter((item) => item && item.monthKey === selectedMonth)
       .forEach((item) => {
         const key = item.empId || item.name || "UNKNOWN";
         if (!map[key]) {
@@ -277,14 +285,14 @@ export default function App() {
 
   const adminMonthRecords = useMemo(() => {
     return Object.values(mealRecords || {})
-      .filter((item) => item.monthKey === selectedMonth)
+      .filter((item) => item && item.monthKey === selectedMonth)
       .filter((item) => adminStoreFilter === "全部" || (item.store || "未填店名") === adminStoreFilter)
       .sort((a, b) => String(b.dateKey || "").localeCompare(String(a.dateKey || "")) || String(a.name || "").localeCompare(String(b.name || "")));
   }, [mealRecords, selectedMonth, adminStoreFilter]);
 
   const adminTodayRecords = useMemo(() => {
     return Object.values(mealRecords || {})
-      .filter((item) => item.dateKey === mealDate)
+      .filter((item) => item && item.dateKey === mealDate)
       .filter((item) => adminStoreFilter === "全部" || (item.store || "未填店名") === adminStoreFilter);
   }, [mealRecords, mealDate, adminStoreFilter]);
 
@@ -306,6 +314,35 @@ export default function App() {
       monthTop,
     };
   }, [adminTodayRecords, adminMonthRecords]);
+
+
+  const selectedEmployeeMonthRecords = useMemo(() => {
+    if (!selectedEmpKey) return [];
+    const monthKey = getMonthKeyFromDateKey(mealDate);
+    return Object.values(mealRecords || {})
+      .filter((item) => item && item.dateKey && normalizeEmpId(item.empId) === normalizeEmpId(selectedEmpKey))
+      .filter((item) => item.monthKey === monthKey)
+      .sort((a, b) => String(b.dateKey || "").localeCompare(String(a.dateKey || "")));
+  }, [mealRecords, selectedEmpKey, mealDate]);
+
+  const selectedEmployeePaymentKey = selectedEmpKey ? `${getMonthKeyFromDateKey(mealDate)}_${selectedEmpKey}` : "";
+  const paymentRecords = mealRecords?.payments || {};
+
+  const employeeMonthSummary = useMemo(() => {
+    const totalMealAmount = selectedEmployeeMonthRecords.reduce((sum, item) => sum + (Number(item.mealAmount) || 0), 0);
+    const totalSubsidy = selectedEmployeeMonthRecords.reduce((sum, item) => sum + (Number(item.subsidyAmount) || 0), 0);
+    const totalEmployeePay = selectedEmployeeMonthRecords.reduce((sum, item) => sum + (Number(item.employeePay) || 0), 0);
+    const paidRecord = selectedEmployeePaymentKey ? paymentRecords[selectedEmployeePaymentKey] : null;
+
+    return {
+      monthKey: getMonthKeyFromDateKey(mealDate),
+      days: selectedEmployeeMonthRecords.length,
+      totalMealAmount,
+      totalSubsidy,
+      totalEmployeePay,
+      isPaid: Boolean(paidRecord?.paid),
+    };
+  }, [selectedEmployeeMonthRecords, selectedEmployeePaymentKey, paymentRecords, mealDate]);
 
   const filteredMonthlySummary = useMemo(() => {
     const map = {};
@@ -334,6 +371,60 @@ export default function App() {
     return Object.values(map).sort((a, b) => b.totalEmployeePay - a.totalEmployeePay);
   }, [adminMonthRecords]);
 
+  const filteredMonthlySummaryWithPaid = useMemo(() => {
+    return filteredMonthlySummary.map((item) => {
+      const key = `${selectedMonth}_${item.empId}`;
+      const payment = paymentRecords[key] || {};
+      return { ...item, paid: Boolean(payment.paid), paidAmount: payment.amount || 0 };
+    });
+  }, [filteredMonthlySummary, paymentRecords, selectedMonth]);
+
+  const storeSettlementSummary = useMemo(() => {
+    const map = {};
+    adminMonthRecords.forEach((item) => {
+      const store = item.store || "未填店名";
+      if (!map[store]) {
+        map[store] = { store, days: 0, totalMealAmount: 0, totalSubsidy: 0, totalEmployeePay: 0 };
+      }
+      map[store].days += 1;
+      map[store].totalMealAmount += Number(item.mealAmount) || 0;
+      map[store].totalSubsidy += Number(item.subsidyAmount) || 0;
+      map[store].totalEmployeePay += Number(item.employeePay) || 0;
+    });
+    return Object.values(map).sort((a, b) => b.totalEmployeePay - a.totalEmployeePay);
+  }, [adminMonthRecords]);
+
+  const currentBaseUrl = window.location.origin + window.location.pathname;
+
+  const markPaid = async (item) => {
+    const pin = window.prompt(`請輸入管理員 PIN，確認 ${item.name} ${selectedMonth} 已收款`);
+    if (pin !== ADMIN_DELETE_PIN) {
+      alert("PIN 錯誤，未執行收款");
+      return;
+    }
+    await set(ref(db, `meal_records/payments/${selectedMonth}_${item.empId}`), {
+      empId: item.empId,
+      name: item.name,
+      store: item.store || "",
+      monthKey: selectedMonth,
+      amount: Number(item.totalEmployeePay) || 0,
+      paid: true,
+      paidAt: Date.now(),
+      paidBy: "admin",
+    });
+    alert(`${item.name} 已標記收款`);
+  };
+
+  const unmarkPaid = async (item) => {
+    const pin = window.prompt(`請輸入管理員 PIN，取消 ${item.name} ${selectedMonth} 已收款`);
+    if (pin !== ADMIN_DELETE_PIN) {
+      alert("PIN 錯誤，未取消收款");
+      return;
+    }
+    await remove(ref(db, `meal_records/payments/${selectedMonth}_${item.empId}`));
+    alert(`${item.name} 已取消收款`);
+  };
+
   const openEditMeal = (item) => {
     setEditingMeal(item);
     setEditMealAmount(String(item.mealAmount || ""));
@@ -342,6 +433,12 @@ export default function App() {
 
   const saveEditMeal = async () => {
     if (!editingMeal) return;
+
+    const pin = window.prompt("請輸入管理員 PIN 才能修改紀錄");
+    if (pin !== ADMIN_DELETE_PIN) {
+      alert("PIN 錯誤，不能修改");
+      return;
+    }
 
     const amount = Number(editMealAmount);
     if (!amount || amount < 0) {
@@ -476,6 +573,11 @@ export default function App() {
   };
 
   const deleteMealRecord = async (item) => {
+    const pin = window.prompt("請輸入管理員 PIN 才能刪除紀錄");
+    if (pin !== ADMIN_DELETE_PIN) {
+      alert("PIN 錯誤，不能刪除");
+      return;
+    }
     const ok = window.confirm(`確定刪除 ${item.name} ${item.dateKey} 的員工餐紀錄嗎？`);
     if (!ok) return;
     await remove(ref(db, `meal_records/${item.dateKey}_${item.empId}`));
@@ -610,9 +712,14 @@ export default function App() {
                   placeholder="輸入工號"
                 />
                 {matchedEmployee ? (
-                  <div style={styles.employeeFound}>
-                    {matchedEmployee.name}｜{matchedEmployee.store || "未填店名"}
-                  </div>
+                  <>
+                    <div style={styles.employeeFound}>
+                      {matchedEmployee.name}｜{matchedEmployee.store || "未填店名"}
+                    </div>
+                    <button style={styles.qrMiniBtn} onClick={() => setShowQrLogin(!showQrLogin)}>
+                      QRCode 登入
+                    </button>
+                  </>
                 ) : empId.trim() ? (
                   <div style={styles.employeeNotFound}>找不到員工</div>
                 ) : null}
@@ -630,6 +737,46 @@ export default function App() {
               <MetricBox icon="👛" title="今日自付金額" value={`${mealCalc.employeePay} 元`} sub="超出補貼金額 × 0.9" color="#dc2626" />
             </div>
           </section>
+
+          {matchedEmployee ? (
+            <section style={styles.employeeMonthCard}>
+              <div style={styles.cardTitleRow}>
+                <div>
+                  <div style={styles.cardTitle}>員工個人月結</div>
+                  <div style={styles.cardSubTitle}>{employeeMonthSummary.monthKey}｜{matchedEmployee.name} 的個人員工餐紀錄</div>
+                </div>
+                <div style={employeeMonthSummary.isPaid ? styles.paidBadge : styles.unpaidBadge}>
+                  {employeeMonthSummary.isPaid ? "已收款" : "未收款"}
+                </div>
+              </div>
+
+              <div style={styles.personalSummaryGrid}>
+                <MetricSmall title="本月用餐天數" value={`${employeeMonthSummary.days} 天`} />
+                <MetricSmall title="本月已吃多少" value={`${employeeMonthSummary.totalMealAmount} 元`} />
+                <MetricSmall title="公司補貼" value={`${employeeMonthSummary.totalSubsidy} 元`} />
+                <MetricSmall title="本月應繳多少" value={`${employeeMonthSummary.isPaid ? 0 : employeeMonthSummary.totalEmployeePay} 元`} danger />
+              </div>
+
+              {showQrLogin ? (
+                <div style={styles.qrLoginBox}>
+                  <div>
+                    <div style={styles.qrTitle}>員工 QRCode 快速登入</div>
+                    <div style={styles.qrText}>把這個網址做成 QRCode，以後掃碼就會自動帶入工號。</div>
+                    <input
+                      style={styles.qrUrlInput}
+                      value={`${currentBaseUrl}?emp=${selectedEmpKey}`}
+                      readOnly
+                      onFocus={(e) => e.target.select()}
+                    />
+                  </div>
+                  <div style={styles.qrPlaceholder}>
+                    QR
+                    <span>可用 QRCode 工具產生</span>
+                  </div>
+                </div>
+              ) : null}
+            </section>
+          ) : null}
 
           <section style={styles.entryCard}>
             <div style={styles.cardTitleRow}>
@@ -771,6 +918,31 @@ export default function App() {
               <section style={styles.recordsCard}>
                 <div style={styles.cardTitleRow}>
                   <div>
+                    <div style={styles.cardTitle}>店別分帳</div>
+                    <div style={styles.cardSubTitle}>{selectedMonth}｜各店員工餐補貼與應收款</div>
+                  </div>
+                </div>
+
+                {storeSettlementSummary.length === 0 ? (
+                  <div style={styles.emptyText}>目前尚無店別分帳資料</div>
+                ) : (
+                  <div style={styles.personalSummaryGrid}>
+                    {storeSettlementSummary.map((store) => (
+                      <div key={store.store} style={styles.storeSplitCard}>
+                        <div style={styles.storeName}>{store.store}</div>
+                        <div style={styles.storeLine}>用餐筆數：{store.days}</div>
+                        <div style={styles.storeLine}>餐費總額：{store.totalMealAmount} 元</div>
+                        <div style={styles.storeLine}>公司補貼：{store.totalSubsidy} 元</div>
+                        <div style={styles.storePay}>應向員工收：{store.totalEmployeePay} 元</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              <section style={styles.recordsCard}>
+                <div style={styles.cardTitleRow}>
+                  <div>
                     <div style={styles.cardTitle}>月底結算</div>
                     <div style={styles.cardSubTitle}>{selectedMonth}｜{adminStoreFilter}｜用於月底向員工收費統計</div>
                   </div>
@@ -790,10 +962,11 @@ export default function App() {
                           <th>公司補貼</th>
                           <th>超出金額</th>
                           <th>員工自付</th>
+                          <th>收款狀態</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredMonthlySummary.map((item) => (
+                        {filteredMonthlySummaryWithPaid.map((item) => (
                           <tr key={item.empId}>
                             <td>{item.name}<br /><span>{item.empId}</span></td>
                             <td>{item.store}</td>
@@ -801,7 +974,18 @@ export default function App() {
                             <td>{item.totalMealAmount}</td>
                             <td>{item.totalSubsidy}</td>
                             <td>{item.totalOverAmount}</td>
-                            <td style={styles.redText}><b>{item.totalEmployeePay}</b></td>
+                            <td style={styles.redText}><b>{item.paid ? 0 : item.totalEmployeePay}</b></td>
+                            <td>
+                              <span style={item.paid ? styles.paidPill : styles.unpaidPill}>
+                                {item.paid ? "已收款" : "未收款"}
+                              </span>
+                              <br />
+                              {item.paid ? (
+                                <button style={styles.tableEditBtn} onClick={() => unmarkPaid(item)}>取消</button>
+                              ) : (
+                                <button style={styles.tableEditBtn} onClick={() => markPaid(item)}>已收款</button>
+                              )}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -843,6 +1027,15 @@ function MetricBox({ icon, title, value, sub, color }) {
       <div style={styles.metricTitle}>{title}</div>
       <div style={{ ...styles.metricValue, color }}>{value}</div>
       <div style={styles.metricSub}>{sub}</div>
+    </div>
+  );
+}
+
+function MetricSmall({ title, value, danger = false }) {
+  return (
+    <div style={danger ? styles.metricSmallDanger : styles.metricSmall}>
+      <div style={styles.metricSmallTitle}>{title}</div>
+      <div style={styles.metricSmallValue}>{value}</div>
     </div>
   );
 }
@@ -1379,6 +1572,154 @@ const styles = {
     fontWeight: 950,
     cursor: "pointer",
   },
+
+  employeeMonthCard: {
+    border: "1px solid #dbe3ef",
+    borderRadius: 18,
+    background: "#ffffff",
+    padding: 20,
+    marginBottom: 20,
+  },
+  personalSummaryGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gap: 14,
+  },
+  metricSmall: {
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+    borderRadius: 16,
+    padding: 16,
+  },
+  metricSmallDanger: {
+    background: "#fff1f2",
+    border: "1px solid #fecdd3",
+    borderRadius: 16,
+    padding: 16,
+  },
+  metricSmallTitle: {
+    color: "#64748b",
+    fontSize: 15,
+    fontWeight: 950,
+  },
+  metricSmallValue: {
+    marginTop: 8,
+    fontSize: 26,
+    fontWeight: 950,
+    color: "#111827",
+  },
+  paidBadge: {
+    background: "#dcfce7",
+    color: "#15803d",
+    border: "1px solid #86efac",
+    borderRadius: 999,
+    padding: "10px 16px",
+    fontSize: 18,
+    fontWeight: 950,
+  },
+  unpaidBadge: {
+    background: "#fff7ed",
+    color: "#c2410c",
+    border: "1px solid #fdba74",
+    borderRadius: 999,
+    padding: "10px 16px",
+    fontSize: 18,
+    fontWeight: 950,
+  },
+  paidPill: {
+    display: "inline-block",
+    background: "#dcfce7",
+    color: "#15803d",
+    borderRadius: 999,
+    padding: "6px 12px",
+    fontWeight: 950,
+  },
+  unpaidPill: {
+    display: "inline-block",
+    background: "#fff7ed",
+    color: "#c2410c",
+    borderRadius: 999,
+    padding: "6px 12px",
+    fontWeight: 950,
+  },
+  qrMiniBtn: {
+    marginTop: 8,
+    border: "1px solid #93c5fd",
+    background: "#eff6ff",
+    color: "#1d4ed8",
+    borderRadius: 10,
+    padding: "8px 12px",
+    fontWeight: 950,
+    cursor: "pointer",
+  },
+  qrLoginBox: {
+    marginTop: 16,
+    border: "1px dashed #93c5fd",
+    background: "#f8fbff",
+    borderRadius: 16,
+    padding: 16,
+    display: "grid",
+    gridTemplateColumns: "1fr 120px",
+    gap: 16,
+    alignItems: "center",
+  },
+  qrTitle: {
+    fontSize: 20,
+    fontWeight: 950,
+  },
+  qrText: {
+    marginTop: 6,
+    color: "#64748b",
+    fontWeight: 800,
+  },
+  qrUrlInput: {
+    width: "100%",
+    marginTop: 10,
+    minHeight: 44,
+    borderRadius: 10,
+    border: "1px solid #cbd5e1",
+    padding: "0 12px",
+    color: "#111827",
+    WebkitTextFillColor: "#111827",
+    fontWeight: 850,
+    boxSizing: "border-box",
+  },
+  qrPlaceholder: {
+    width: 110,
+    height: 110,
+    borderRadius: 12,
+    border: "2px solid #cbd5e1",
+    display: "grid",
+    placeItems: "center",
+    fontSize: 34,
+    fontWeight: 950,
+    color: "#334155",
+    background: "#fff",
+    textAlign: "center",
+  },
+  storeSplitCard: {
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+    borderRadius: 16,
+    padding: 16,
+  },
+  storeName: {
+    fontSize: 22,
+    fontWeight: 950,
+    marginBottom: 10,
+  },
+  storeLine: {
+    color: "#475569",
+    fontSize: 16,
+    fontWeight: 850,
+    marginTop: 6,
+  },
+  storePay: {
+    marginTop: 10,
+    color: "#dc2626",
+    fontSize: 20,
+    fontWeight: 950,
+  },
   loadingPage: {
     minHeight: "100vh",
     display: "grid",
@@ -1484,6 +1825,8 @@ if (window.innerWidth <= 900) {
   styles.entryRow.gridTemplateColumns = "1fr";
   styles.currencyText.display = "none";
   styles.dashboardGrid.gridTemplateColumns = "1fr";
+  styles.personalSummaryGrid.gridTemplateColumns = "1fr";
+  styles.qrLoginBox.gridTemplateColumns = "1fr";
   styles.adminControlBar.flexDirection = "column";
   styles.adminSelect.width = "100%";
   styles.monthInput.width = "100%";
