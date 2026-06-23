@@ -115,25 +115,6 @@ const calculateEmployeeWork = (records = []) => {
   };
 };
 
-const escapeHtml = (value) => String(value ?? "")
-  .replace(/&/g, "&amp;")
-  .replace(/</g, "&lt;")
-  .replace(/>/g, "&gt;")
-  .replace(/"/g, "&quot;");
-
-const buildExcelCell = (value, className = "") => `<td class="${className}">${escapeHtml(value)}</td>`;
-
-const buildExcelNumberCell = (value, className = "") => {
-  const numeric = Number(value) || 0;
-  return `<td class="number ${className}">${numeric}</td>`;
-};
-
-const normalizeMealRecordsArray = (mealRecords = {}) => {
-  return Object.entries(mealRecords || {})
-    .filter(([key, value]) => key !== "payments" && value && typeof value === "object")
-    .map(([key, value]) => ({ key, ...value }));
-};
-
 export default function App() {
   const [authReady, setAuthReady] = useState(false);
   const [authError, setAuthError] = useState("");
@@ -321,107 +302,6 @@ export default function App() {
       .sort((a, b) => String(b.dateKey || "").localeCompare(String(a.dateKey || "")) || String(a.name || "").localeCompare(String(b.name || "")));
   }, [mealRecords, selectedMonth, adminStoreFilter]);
 
-  const auditMonthRows = useMemo(() => {
-    const employeeMap = {};
-
-    employees.forEach((emp) => {
-      const key = emp.empId || emp.id;
-      if (!key) return;
-      employeeMap[normalizeEmpId(key)] = {
-        empId: key,
-        name: emp.name || key,
-        store: emp.store || "未填店名",
-        role: emp.role || "未設定",
-      };
-    });
-
-    const recordsByEmpDate = {};
-    records.forEach((record) => {
-      const recordDateKey = record?.dateKey || (record?.createdAt ? formatTaipeiDateKey(record.createdAt) : "");
-      if (!recordDateKey || getMonthKeyFromDateKey(recordDateKey) !== selectedMonth) return;
-      const key = normalizeEmpId(record.empId);
-      if (!key) return;
-      if (!recordsByEmpDate[`${recordDateKey}_${key}`]) recordsByEmpDate[`${recordDateKey}_${key}`] = [];
-      recordsByEmpDate[`${recordDateKey}_${key}`].push(record);
-
-      if (!employeeMap[key]) {
-        employeeMap[key] = {
-          empId: record.empId || key,
-          name: record.name || key,
-          store: record.store || "未填店名",
-          role: record.role || "未設定",
-        };
-      }
-    });
-
-    const mealsByDateEmp = {};
-    normalizeMealRecordsArray(mealRecords).forEach((meal) => {
-      if (!meal?.dateKey || getMonthKeyFromDateKey(meal.dateKey) !== selectedMonth) return;
-      const key = normalizeEmpId(meal.empId);
-      if (!key) return;
-      mealsByDateEmp[`${meal.dateKey}_${key}`] = meal;
-
-      if (!employeeMap[key]) {
-        employeeMap[key] = {
-          empId: meal.empId || key,
-          name: meal.name || key,
-          store: meal.store || "未填店名",
-          role: meal.role || "未設定",
-        };
-      }
-    });
-
-    const rowKeys = new Set();
-    Object.keys(recordsByEmpDate).forEach((key) => rowKeys.add(key));
-    Object.keys(mealsByDateEmp).forEach((key) => rowKeys.add(key));
-
-    const rows = Array.from(rowKeys).map((rowKey) => {
-      const [dateKey, empKey] = rowKey.split("_");
-      const emp = employeeMap[empKey] || { empId: empKey, name: empKey, store: "未填店名", role: "未設定" };
-      const dayRecords = recordsByEmpDate[rowKey] || [];
-      const work = calculateEmployeeWork(dayRecords);
-      const meal = mealsByDateEmp[rowKey] || null;
-      const hasMeal = Boolean(meal);
-      const hasAnyWork = work.hasWorkIn || work.hasWorkOut;
-      const workHours = work.canCalculate ? formatHours(work.workHours) : 0;
-      const breakHours = work.canCalculate ? formatHours(work.breakHours) : 0;
-      const subsidyAmount = work.canCalculate ? getMealSubsidy(work.workHours) : 0;
-      const mealAmount = hasMeal ? Number(meal.mealAmount) || 0 : 0;
-      const overAmount = Math.max(0, mealAmount - subsidyAmount);
-      const employeePay = Math.round(overAmount * 0.9);
-
-      let status = "正常";
-      if (hasAnyWork && !hasMeal) status = "未登記";
-      if (hasMeal && !hasAnyWork) status = "無上班紀錄";
-      if (hasAnyWork && !work.canCalculate) status = "工時異常";
-      if (hasMeal && overAmount > 0) status = "超額";
-
-      return {
-        dateKey,
-        store: emp.store || meal?.store || "未填店名",
-        name: emp.name || meal?.name || emp.empId,
-        empId: emp.empId || meal?.empId || empKey,
-        role: emp.role || meal?.role || "未設定",
-        workInAt: work.workInAt || 0,
-        workOutAt: work.workOutAt || 0,
-        workHours,
-        breakHours,
-        subsidyAmount,
-        mealAmount,
-        overAmount,
-        employeePay,
-        note: meal?.note || "",
-        status,
-        hasMeal,
-        hasAnyWork,
-      };
-    })
-      .filter((item) => adminStoreFilter === "全部" || (item.store || "未填店名") === adminStoreFilter)
-      .sort((a, b) => String(a.dateKey || "").localeCompare(String(b.dateKey || "")) || String(a.store || "").localeCompare(String(b.store || ""), "zh-Hant") || String(a.name || "").localeCompare(String(b.name || ""), "zh-Hant"));
-
-    return rows;
-  }, [employees, records, mealRecords, selectedMonth, adminStoreFilter]);
-
   const adminTodayRecords = useMemo(() => {
     return Object.values(mealRecords || {})
       .filter((item) => item && item.dateKey === mealDate)
@@ -608,54 +488,13 @@ export default function App() {
     alert("員工餐紀錄已修改");
   };
 
-  const downloadExcelHtml = (filename, html) => {
-    const excelFile = `
-      <html xmlns:o="urn:schemas-microsoft-com:office:office"
-            xmlns:x="urn:schemas-microsoft-com:office:excel"
-            xmlns="http://www.w3.org/TR/REC-html40">
-        <head>
-          <meta charset="UTF-8" />
-          <!--[if gte mso 9]>
-          <xml>
-            <x:ExcelWorkbook>
-              <x:ExcelWorksheets>
-                <x:ExcelWorksheet>
-                  <x:Name>員工餐查帳</x:Name>
-                  <x:WorksheetOptions>
-                    <x:FreezePanes />
-                    <x:FrozenNoSplit />
-                    <x:SplitHorizontal>7</x:SplitHorizontal>
-                    <x:TopRowBottomPane>7</x:TopRowBottomPane>
-                    <x:ActivePane>2</x:ActivePane>
-                  </x:WorksheetOptions>
-                </x:ExcelWorksheet>
-              </x:ExcelWorksheets>
-            </x:ExcelWorkbook>
-          </xml>
-          <![endif]-->
-          <style>
-            body { font-family: Arial, 'Microsoft JhengHei', sans-serif; }
-            table { border-collapse: collapse; font-size: 11pt; }
-            th, td { border: 1px solid #999; padding: 6px 8px; text-align: center; white-space: nowrap; mso-number-format:'\@'; }
-            th { background: #d9ead3; font-weight: bold; }
-            .title { font-size: 18pt; font-weight: bold; background: #1f4e79; color: #fff; text-align: left; }
-            .summaryLabel { background: #eef2ff; font-weight: bold; text-align: left; }
-            .summaryValue { background: #fff; font-weight: bold; color: #0f172a; }
-            .number { mso-number-format:'0'; }
-            .hours { mso-number-format:'0.00'; }
-            .ok { color: #166534; }
-            .over { color: #b91c1c; font-weight: bold; }
-            .missing { background: #fef3c7; color: #92400e; font-weight: bold; }
-            .abnormal { background: #fee2e2; color: #b91c1c; font-weight: bold; }
-            .noWork { background: #f3f4f6; color: #4b5563; }
-            .subtotal { background: #fff2cc; font-weight: bold; }
-          </style>
-        </head>
-        <body>${html}</body>
-      </html>`;
+  const downloadCsv = (filename, header, rows) => {
+    const csv = [header, ...rows]
+      .map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","))
+      .join("\\n");
 
-    const blob = new Blob(["\uFEFF" + excelFile], {
-      type: "application/vnd.ms-excel;charset=utf-8;",
+    const blob = new Blob(["\\uFEFF" + csv], {
+      type: "text/csv;charset=utf-8;",
     });
 
     const link = document.createElement("a");
@@ -665,129 +504,12 @@ export default function App() {
     URL.revokeObjectURL(link.href);
   };
 
-  const exportMonthlyExcel = () => {
-    if (!auditMonthRows.length) {
-      alert(`${selectedMonth} 沒有可匯出的查帳資料`);
+  const exportMonthlyCsv = () => {
+    if (!adminMonthRecords.length) {
+      alert(`${selectedMonth} 沒有資料可匯出`);
       return;
     }
 
-<<<<<<< HEAD
-    const totals = auditMonthRows.reduce((acc, item) => {
-      acc.workDays += item.hasAnyWork ? 1 : 0;
-      acc.mealCount += item.hasMeal ? 1 : 0;
-      acc.mealAmount += Number(item.mealAmount) || 0;
-      acc.subsidyAmount += Number(item.subsidyAmount) || 0;
-      acc.overAmount += Number(item.overAmount) || 0;
-      acc.employeePay += Number(item.employeePay) || 0;
-      acc.overCount += Number(item.overAmount) > 0 ? 1 : 0;
-      acc.missingCount += item.status === "未登記" ? 1 : 0;
-      acc.abnormalCount += item.status === "工時異常" ? 1 : 0;
-      return acc;
-    }, {
-      workDays: 0,
-      mealCount: 0,
-      mealAmount: 0,
-      subsidyAmount: 0,
-      overAmount: 0,
-      employeePay: 0,
-      overCount: 0,
-      missingCount: 0,
-      abnormalCount: 0,
-    });
-
-    const summaryRows = [
-      ["月份", selectedMonth, "店別", adminStoreFilter],
-      ["上班筆數", totals.workDays, "員工餐登記筆數", totals.mealCount],
-      ["應補助總額", totals.subsidyAmount, "實際餐費總額", totals.mealAmount],
-      ["超出總額", totals.overAmount, "員工自付總額", totals.employeePay],
-      ["超額次數", totals.overCount, "有上班未登記", totals.missingCount],
-      ["工時異常", totals.abnormalCount, "產生時間", new Date().toLocaleString("zh-TW", { hour12: false })],
-    ].map((row) => `
-      <tr>
-        ${buildExcelCell(row[0], "summaryLabel")}
-        ${buildExcelCell(row[1], "summaryValue")}
-        ${buildExcelCell(row[2], "summaryLabel")}
-        ${buildExcelCell(row[3], "summaryValue")}
-        <td colspan="10"></td>
-      </tr>
-    `).join("");
-
-    const header = `
-      <tr>
-        <th>日期</th>
-        <th>店別</th>
-        <th>員工</th>
-        <th>工號</th>
-        <th>身分</th>
-        <th>上班</th>
-        <th>下班</th>
-        <th>工時</th>
-        <th>休息</th>
-        <th>應補助</th>
-        <th>實際吃</th>
-        <th>超出</th>
-        <th>員工自付</th>
-        <th>狀態</th>
-        <th>備註</th>
-      </tr>
-    `;
-
-    const rows = auditMonthRows.map((item) => {
-      const statusClass = item.status === "超額"
-        ? "over"
-        : item.status === "未登記"
-        ? "missing"
-        : item.status === "工時異常"
-        ? "abnormal"
-        : item.status === "無上班紀錄"
-        ? "noWork"
-        : "ok";
-
-      return `
-        <tr>
-          ${buildExcelCell(item.dateKey)}
-          ${buildExcelCell(item.store)}
-          ${buildExcelCell(item.name)}
-          ${buildExcelCell(item.empId)}
-          ${buildExcelCell(item.role)}
-          ${buildExcelCell(formatTime(item.workInAt))}
-          ${buildExcelCell(formatTime(item.workOutAt))}
-          ${buildExcelNumberCell(item.workHours, "hours")}
-          ${buildExcelNumberCell(item.breakHours, "hours")}
-          ${buildExcelNumberCell(item.subsidyAmount)}
-          ${buildExcelNumberCell(item.mealAmount, Number(item.overAmount) > 0 ? "over" : "")}
-          ${buildExcelNumberCell(item.overAmount, Number(item.overAmount) > 0 ? "over" : "")}
-          ${buildExcelNumberCell(item.employeePay, Number(item.employeePay) > 0 ? "over" : "")}
-          ${buildExcelCell(item.status, statusClass)}
-          ${buildExcelCell(item.note || "")}
-        </tr>
-      `;
-    }).join("");
-
-    const totalRow = `
-      <tr class="subtotal">
-        <td colspan="7">合計</td>
-        ${buildExcelNumberCell("")}
-        ${buildExcelNumberCell("")}
-        ${buildExcelNumberCell(totals.subsidyAmount)}
-        ${buildExcelNumberCell(totals.mealAmount)}
-        ${buildExcelNumberCell(totals.overAmount, totals.overAmount > 0 ? "over" : "")}
-        ${buildExcelNumberCell(totals.employeePay, totals.employeePay > 0 ? "over" : "")}
-        <td colspan="2">超額 ${totals.overCount} 次｜未登記 ${totals.missingCount} 次</td>
-      </tr>
-    `;
-
-    const html = `
-      <table>
-        <tr><td class="title" colspan="15">員工餐月結查帳表</td></tr>
-        ${summaryRows}
-        <tr><td colspan="15"></td></tr>
-        ${header}
-        ${rows}
-        ${totalRow}
-      </table>
-    `;
-=======
     const header = ["月份", "日期", "店別", "員工", "工號", "身分", "上班", "下班", "工時", "休息", "吃的金額", "原本可補貼", "實際補貼", "超出金額", "員工自付", "審核狀態", "備註"];
     const rows = adminMonthRecords.map((item) => [
       selectedMonth,
@@ -808,10 +530,9 @@ export default function App() {
       item.approvalRequired ? (APPROVAL_STATUS_TEXT[item.approvalStatus || "pending"] || item.approvalStatus || "") : "不需審核",
       item.note || "",
     ]);
->>>>>>> 992b046 (新增員工餐店長審核功能)
 
     const storeText = adminStoreFilter === "全部" ? "全部店別" : adminStoreFilter;
-    downloadExcelHtml(`員工餐月結查帳-${selectedMonth}-${storeText}.xls`, html);
+    downloadCsv(`員工餐向員工收費月結-${selectedMonth}-${storeText}.csv`, header, rows);
   };
 
   const submitMeal = async () => {
@@ -1202,7 +923,7 @@ export default function App() {
                 <div style={styles.cardSubTitle}>最多顯示最近 10 筆</div>
               </div>
               {isAdmin ? (
-                <button style={styles.outlineBtn} onClick={exportMonthlyExcel}>📊 匯出查帳 Excel</button>
+                <button style={styles.outlineBtn} onClick={exportMonthlyCsv}>📊 匯出 CSV</button>
               ) : null}
             </div>
 
