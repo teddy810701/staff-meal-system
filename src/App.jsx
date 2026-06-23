@@ -139,20 +139,6 @@ export default function App() {
   const [editingMeal, setEditingMeal] = useState(null);
   const [editMealAmount, setEditMealAmount] = useState("");
   const [editNote, setEditNote] = useState("");
-  const [activeSection, setActiveSection] = useState("首頁");
-
-  const goSection = (sectionId, label) => {
-    setActiveSection(label);
-    setTimeout(() => {
-      const target = document.getElementById(sectionId);
-      if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 0);
-  };
-
-  const sideItemStyle = (label) => ({
-    ...styles.sideNavItem,
-    ...(activeSection === label ? styles.sideNavItemActive : {}),
-  });
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -764,35 +750,6 @@ export default function App() {
       ) : null}
 
       <div style={styles.appShell}>
-        <aside style={styles.sidebar}>
-          <div style={styles.brandBlock}>
-            <div style={styles.brandLogo}>MWD</div>
-            <div>
-              <div style={styles.brandTitle}>麥味登</div>
-              <div style={styles.brandSub}>Staff Meal</div>
-            </div>
-          </div>
-
-          <nav style={styles.sideNav}>
-            <button type="button" style={sideItemStyle("首頁")} onClick={() => goSection("home-section", "首頁")}>🏠 首頁</button>
-            <button type="button" style={sideItemStyle("員工餐登記")} onClick={() => goSection("meal-entry-section", "員工餐登記")}>🍴 員工餐登記</button>
-            <button type="button" style={sideItemStyle("店長審核")} onClick={() => goSection("manager-approval-section", "店長審核")}>✅ 店長審核 <span style={styles.sideBadge}>{managerPendingRecords.length}</span></button>
-            <button type="button" style={sideItemStyle("月結查帳")} onClick={() => goSection("monthly-report-section", "月結查帳")}>📊 月結查帳</button>
-            <button type="button" style={sideItemStyle("員工管理")} onClick={() => goSection("employee-setting-section", "員工管理")}>👥 員工管理</button>
-            <button type="button" style={sideItemStyle("打卡紀錄")} onClick={() => goSection("clock-record-section", "打卡紀錄")}>🕘 打卡紀錄</button>
-            <button type="button" style={sideItemStyle("系統設定")} onClick={() => goSection("system-setting-section", "系統設定")}>⚙️ 系統設定</button>
-          </nav>
-
-          <div style={styles.sideFooter}>
-            <div style={styles.sideAvatar}>管</div>
-            <div>
-              <div style={styles.sideUser}>{isAdmin ? "管理員模式" : isManager ? `${managerStore}店長` : "一般模式"}</div>
-              <div style={styles.sideRole}>員工餐補助系統</div>
-            </div>
-          </div>
-        </aside>
-
-        <div style={styles.mainShell}>
         <header style={styles.topHeader}>
           <div style={styles.headerLeft}>
             <div style={styles.appIcon}>🍴</div>
@@ -856,7 +813,7 @@ export default function App() {
           </div>
         </header>
 
-        <main id="home-section" style={styles.contentArea}>
+        <main style={styles.contentArea}>
           <section style={styles.employeeHero}>
             <div style={styles.employeeBlock}>
               <div style={styles.avatarCircle}>👤</div>
@@ -917,7 +874,7 @@ export default function App() {
             </section>
           ) : null}
 
-          <section id="meal-entry-section" style={styles.entryCard}>
+          <section style={styles.entryCard}>
             <div style={styles.cardTitleRow}>
               <div>
                 <div style={styles.cardTitle}>今日實際用餐金額</div>
@@ -959,7 +916,7 @@ export default function App() {
             {message ? <div style={message.includes("已儲存") ? styles.successBox : styles.warningBox}>{message}</div> : null}
           </section>
 
-          <section id="clock-record-section" style={styles.recordsCard}>
+          <section style={styles.recordsCard}>
             <div style={styles.cardTitleRow}>
               <div>
                 <div style={styles.cardTitle}>本月餐費紀錄</div>
@@ -1012,7 +969,7 @@ export default function App() {
           </section>
 
           {isManager ? (
-            <section id="manager-approval-section" style={styles.recordsCard}>
+            <section style={styles.recordsCard}>
               <div style={styles.cardTitleRow}>
                 <div>
                   <div style={styles.cardTitle}>{managerStore}店長審核</div>
@@ -1070,7 +1027,7 @@ export default function App() {
 
           {isAdmin ? (
             <>
-              <section id="employee-setting-section" style={styles.recordsCard}>
+              <section style={styles.recordsCard}>
                 <div style={styles.cardTitleRow}>
                   <div>
                     <div style={styles.cardTitle}>員工餐審核設定</div>
@@ -1124,7 +1081,7 @@ export default function App() {
                 )}
               </section>
 
-              <section id="system-setting-section" style={styles.adminCard}>
+              <section style={styles.adminCard}>
                 <div style={styles.cardTitleRow}>
                   <div>
                     <div style={styles.cardTitle}>管理模式 Dashboard</div>
@@ -1182,7 +1139,7 @@ export default function App() {
                 )}
               </section>
 
-              <section id="monthly-report-section" style={styles.recordsCard}>
+              <section style={styles.recordsCard}>
                 <div style={styles.cardTitleRow}>
                   <div>
                     <div style={styles.cardTitle}>月底結算</div>
@@ -1240,7 +1197,6 @@ export default function App() {
             </>
           ) : null}
         </main>
-        </div>
       </div>
     </div>
   );
@@ -1288,1143 +1244,778 @@ function MetricSmall({ title, value, danger = false }) {
 const styles = {
   page: {
     minHeight: "100vh",
-    background: "linear-gradient(180deg, #f7faf9 0%, #eef7f2 42%, #f6f7fb 100%)",
-    color: "#101828",
-    padding: 18,
+    background: "#eef4fb",
+    color: "#111827",
+    padding: 12,
     boxSizing: "border-box",
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Noto Sans TC', 'Segoe UI', system-ui, sans-serif",
+    fontFamily: "'Noto Sans TC', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   },
   appShell: {
-    maxWidth: 430,
-    minHeight: "calc(100vh - 36px)",
+    maxWidth: 1180,
     margin: "0 auto",
-    background: "rgba(255,255,255,.86)",
-    border: "1px solid rgba(226,232,240,.9)",
-    borderRadius: 34,
+    background: "#ffffff",
+    border: "1px solid #dbe3ef",
+    borderRadius: 18,
     overflow: "hidden",
-    boxShadow: "0 30px 80px rgba(16,24,40,.16)",
-    backdropFilter: "blur(18px)",
-    WebkitBackdropFilter: "blur(18px)",
+    boxShadow: "0 18px 50px rgba(15,23,42,.10)",
   },
   topHeader: {
-    minHeight: 96,
-    padding: "22px 22px 14px",
-    borderBottom: "1px solid rgba(226,232,240,.7)",
+    minHeight: 104,
+    padding: "18px 28px",
+    borderBottom: "1px solid #dbe3ef",
     display: "flex",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
-    gap: 12,
-    background: "linear-gradient(180deg, rgba(255,255,255,.96), rgba(255,255,255,.78))",
-    position: "sticky",
-    top: 0,
-    zIndex: 10,
-    backdropFilter: "blur(20px)",
-    WebkitBackdropFilter: "blur(20px)",
+    gap: 18,
+    background: "#ffffff",
   },
   headerLeft: {
     display: "flex",
     alignItems: "center",
-    gap: 12,
-    minWidth: 0,
+    gap: 18,
   },
   appIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 18,
+    width: 58,
+    height: 58,
+    borderRadius: 16,
     display: "grid",
     placeItems: "center",
-    background: "linear-gradient(145deg, #0f9f5f, #05743f)",
+    background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
     color: "#fff",
-    fontSize: 26,
-    boxShadow: "0 12px 24px rgba(5,116,63,.26)",
-    flex: "0 0 auto",
+    fontSize: 30,
+    boxShadow: "0 10px 22px rgba(37,99,235,.22)",
   },
   appTitle: {
-    fontSize: 22,
+    fontSize: 32,
     fontWeight: 950,
-    letterSpacing: -0.5,
-    lineHeight: 1.15,
-    color: "#0f172a",
+    letterSpacing: 1,
   },
   appSubTitle: {
-    color: "#667085",
-    fontSize: 12,
+    color: "#64748b",
+    fontSize: 14,
     fontWeight: 800,
-    marginTop: 4,
+    marginTop: 2,
   },
   headerRight: {
     display: "flex",
     alignItems: "center",
-    gap: 8,
+    gap: 12,
     flexWrap: "wrap",
     justifyContent: "flex-end",
   },
   headerDateInput: {
-    width: 132,
-    minHeight: 42,
+    width: 260,
+    minHeight: 64,
     borderRadius: 14,
-    border: "1px solid rgba(208,213,221,.9)",
-    background: "rgba(255,255,255,.92)",
-    color: "#101828",
-    WebkitTextFillColor: "#101828",
-    fontSize: 14,
-    fontWeight: 850,
-    padding: "0 12px",
-    boxShadow: "0 8px 18px rgba(16,24,40,.04)",
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    color: "#111827",
+    WebkitTextFillColor: "#111827",
+    fontSize: 24,
+    fontWeight: 950,
+    padding: "0 18px",
+    boxShadow: "0 8px 20px rgba(15,23,42,.06)",
   },
   passwordInput: {
-    width: 118,
-    minHeight: 42,
+    width: 132,
+    minHeight: 58,
     borderRadius: 14,
-    border: "1px solid rgba(208,213,221,.9)",
-    background: "rgba(255,255,255,.92)",
-    color: "#101828",
-    WebkitTextFillColor: "#101828",
-    fontSize: 14,
-    fontWeight: 800,
-    padding: "0 12px",
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    color: "#111827",
+    WebkitTextFillColor: "#111827",
+    fontSize: 18,
+    fontWeight: 900,
+    padding: "0 14px",
   },
   adminBlueBtn: {
-    minHeight: 42,
+    minHeight: 62,
     border: "none",
     borderRadius: 14,
-    background: "linear-gradient(145deg, #099250, #087443)",
+    background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
     color: "#fff",
-    padding: "0 14px",
-    fontSize: 14,
+    fontSize: 20,
     fontWeight: 950,
+    padding: "0 24px",
     cursor: "pointer",
-    boxShadow: "0 10px 20px rgba(8,116,67,.22)",
+    boxShadow: "0 10px 22px rgba(37,99,235,.20)",
   },
   contentArea: {
-    padding: "18px 14px 30px",
+    padding: 26,
   },
   managerBtn: {
-    minHeight: 42,
+    minHeight: 62,
     border: "none",
     borderRadius: 14,
-    background: "linear-gradient(145deg, #16a34a, #067647)",
+    background: "linear-gradient(135deg, #16a34a, #15803d)",
     color: "#fff",
-    padding: "0 14px",
-    fontSize: 14,
+    fontSize: 20,
     fontWeight: 950,
+    padding: "0 24px",
     cursor: "pointer",
-    boxShadow: "0 10px 20px rgba(22,163,74,.22)",
+    boxShadow: "0 10px 22px rgba(22,163,74,.18)",
   },
   managerLogoutBtn: {
-    minHeight: 42,
-    border: "1px solid #fecaca",
+    minHeight: 62,
+    border: "none",
     borderRadius: 14,
-    background: "#fff5f5",
-    color: "#dc2626",
-    padding: "0 14px",
-    fontSize: 14,
+    background: "linear-gradient(135deg, #16a34a, #15803d)",
+    color: "#fff",
+    fontSize: 20,
     fontWeight: 950,
+    padding: "0 24px",
     cursor: "pointer",
   },
   managerStoreSelect: {
-    width: 98,
-    minHeight: 42,
+    minHeight: 58,
     borderRadius: 14,
-    border: "1px solid rgba(208,213,221,.9)",
-    background: "#fff",
-    fontSize: 14,
-    fontWeight: 900,
-    padding: "0 10px",
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    color: "#111827",
+    fontSize: 18,
+    fontWeight: 950,
+    padding: "0 14px",
   },
+
   employeeHero: {
-    background: "linear-gradient(145deg, #099250, #05603a)",
-    border: "1px solid rgba(255,255,255,.22)",
-    borderRadius: 26,
-    padding: 20,
-    marginBottom: 14,
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 14,
-    boxShadow: "0 18px 36px rgba(5,96,58,.25)",
-    color: "#fff",
+    gap: 20,
+    marginBottom: 20,
   },
   employeeBlock: {
     display: "flex",
     alignItems: "center",
-    gap: 14,
-    minWidth: 0,
+    gap: 18,
   },
   avatarCircle: {
-    width: 54,
-    height: 54,
-    borderRadius: 20,
+    width: 104,
+    height: 104,
+    borderRadius: 999,
+    background: "#eaf2ff",
     display: "grid",
     placeItems: "center",
-    background: "rgba(255,255,255,.18)",
-    color: "#fff",
-    fontSize: 26,
-    flex: "0 0 auto",
+    fontSize: 54,
   },
   empInput: {
-    width: "100%",
-    maxWidth: 220,
-    minHeight: 48,
-    borderRadius: 16,
-    border: "1px solid rgba(255,255,255,.35)",
-    background: "rgba(255,255,255,.95)",
-    color: "#101828",
-    WebkitTextFillColor: "#101828",
-    fontSize: 18,
-    fontWeight: 900,
+    width: 240,
+    minHeight: 58,
+    borderRadius: 12,
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    color: "#111827",
+    WebkitTextFillColor: "#111827",
+    fontSize: 24,
+    fontWeight: 950,
     padding: "0 14px",
-    outline: "none",
   },
   employeeFound: {
     marginTop: 8,
-    fontSize: 14,
+    display: "inline-block",
+    border: "1px solid #93c5fd",
+    color: "#1d4ed8",
+    borderRadius: 10,
+    padding: "6px 10px",
     fontWeight: 950,
-    color: "#ffffff",
+    background: "#eff6ff",
   },
   employeeNotFound: {
     marginTop: 8,
-    fontSize: 14,
+    color: "#dc2626",
     fontWeight: 950,
-    color: "#fffbeb",
   },
   approvalHint: {
     marginTop: 8,
     display: "inline-block",
-    borderRadius: 999,
-    background: "rgba(255,247,237,.96)",
-    color: "#b45309",
+    border: "1px solid #fdba74",
+    color: "#c2410c",
+    borderRadius: 10,
     padding: "6px 10px",
-    fontSize: 12,
     fontWeight: 950,
+    background: "#fff7ed",
   },
   heroNotice: {
-    color: "rgba(255,255,255,.9)",
-    fontSize: 13,
-    fontWeight: 850,
-    lineHeight: 1.4,
+    color: "#2563eb",
+    fontSize: 20,
+    fontWeight: 950,
   },
   overviewCard: {
-    background: "rgba(255,255,255,.92)",
-    border: "1px solid rgba(226,232,240,.9)",
-    borderRadius: 24,
-    padding: 14,
-    marginBottom: 14,
-    boxShadow: "0 12px 28px rgba(16,24,40,.07)",
+    background: "#ffffff",
+    border: "1px solid #dbe3ef",
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 20,
   },
   metricGrid: {
     display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: 10,
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gap: 0,
   },
   metricBox: {
-    background: "linear-gradient(180deg, #ffffff, #f8fafc)",
-    border: "1px solid rgba(226,232,240,.9)",
-    borderRadius: 22,
-    padding: 14,
-    minHeight: 116,
-    boxShadow: "0 8px 20px rgba(16,24,40,.05)",
+    padding: "16px 22px",
+    borderRight: "1px solid #dbe3ef",
+    textAlign: "center",
   },
   metricIcon: {
-    fontSize: 22,
-    marginBottom: 10,
+    width: 56,
+    height: 56,
+    borderRadius: 999,
+    display: "grid",
+    placeItems: "center",
+    color: "#fff",
+    fontSize: 28,
+    margin: "0 auto 8px",
   },
   metricTitle: {
-    color: "#667085",
-    fontSize: 13,
-    fontWeight: 900,
+    fontSize: 17,
+    fontWeight: 950,
+    marginBottom: 10,
   },
   metricValue: {
-    marginTop: 6,
-    fontSize: 24,
+    fontSize: 36,
     fontWeight: 950,
-    color: "#101828",
-    letterSpacing: -0.4,
     lineHeight: 1,
   },
   metricSub: {
-    color: "#667085",
-    marginTop: 8,
-    fontSize: 12,
+    color: "#475569",
+    marginTop: 12,
+    fontSize: 16,
     fontWeight: 800,
     lineHeight: 1.45,
   },
   entryCard: {
-    border: "1px solid rgba(226,232,240,.9)",
-    borderRadius: 26,
-    background: "rgba(255,255,255,.94)",
-    padding: 18,
-    marginBottom: 14,
-    boxShadow: "0 14px 32px rgba(16,24,40,.08)",
+    border: "1px solid #bfdbfe",
+    borderRadius: 18,
+    background: "#f8fbff",
+    padding: 20,
+    marginBottom: 20,
   },
   cardTitleRow: {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 12,
-    marginBottom: 14,
+    gap: 16,
+    marginBottom: 16,
   },
   cardTitle: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: 950,
-    color: "#101828",
-    letterSpacing: -0.3,
   },
   cardSubTitle: {
-    color: "#667085",
-    fontSize: 13,
+    color: "#64748b",
+    fontSize: 15,
     fontWeight: 800,
     marginTop: 4,
-    lineHeight: 1.35,
   },
   subsidyBadge: {
-    border: "1px solid #bbf7d0",
-    background: "#f0fdf4",
-    color: "#067647",
-    borderRadius: 999,
-    padding: "8px 11px",
-    fontSize: 13,
+    border: "1px solid #93c5fd",
+    background: "#eff6ff",
+    color: "#1d4ed8",
+    borderRadius: 12,
+    padding: "10px 14px",
+    fontSize: 18,
     fontWeight: 950,
-    whiteSpace: "nowrap",
   },
   entryRow: {
     display: "grid",
-    gridTemplateColumns: "1fr",
-    gap: 10,
+    gridTemplateColumns: "1fr 40px 240px",
+    gap: 14,
     alignItems: "center",
   },
   mealInput: {
-    minHeight: 58,
-    borderRadius: 18,
-    border: "1px solid rgba(208,213,221,.9)",
+    minHeight: 66,
+    borderRadius: 12,
+    border: "1px solid #cbd5e1",
     background: "#fff",
-    color: "#101828",
-    WebkitTextFillColor: "#101828",
-    fontSize: 22,
+    color: "#111827",
+    WebkitTextFillColor: "#111827",
+    fontSize: 24,
     fontWeight: 950,
-    padding: "0 16px",
-    outline: "none",
+    padding: "0 20px",
   },
   currencyText: {
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: 950,
-    color: "#667085",
   },
   saveButton: {
-    minHeight: 58,
+    minHeight: 66,
     border: "none",
-    borderRadius: 18,
-    background: "linear-gradient(145deg, #099250, #087443)",
+    borderRadius: 14,
+    background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
     color: "#fff",
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: 950,
     cursor: "pointer",
-    boxShadow: "0 14px 26px rgba(8,116,67,.25)",
   },
   formulaBox: {
-    marginTop: 14,
-    border: "1px solid rgba(187,247,208,.75)",
-    background: "#f0fdf4",
-    borderRadius: 18,
-    padding: "14px 16px",
-    fontSize: 13,
+    marginTop: 18,
+    border: "1px solid #dbe3ef",
+    background: "#ffffff",
+    borderRadius: 14,
+    padding: "16px 20px",
+    fontSize: 16,
     fontWeight: 800,
-    color: "#344054",
+    color: "#334155",
     lineHeight: 1.6,
   },
   recordsCard: {
-    background: "rgba(255,255,255,.94)",
-    border: "1px solid rgba(226,232,240,.9)",
-    borderRadius: 26,
-    padding: 18,
-    marginBottom: 14,
-    boxShadow: "0 14px 32px rgba(16,24,40,.08)",
+    background: "#fff",
+    border: "1px solid #dbe3ef",
+    borderRadius: 18,
+    padding: 20,
+    marginBottom: 20,
   },
   tableWrap: {
     overflowX: "auto",
-    border: "1px solid rgba(226,232,240,.9)",
-    borderRadius: 18,
-    background: "#fff",
+    border: "1px solid #dbe3ef",
+    borderRadius: 14,
   },
   cleanTable: {
     width: "100%",
-    borderCollapse: "separate",
-    borderSpacing: 0,
-    fontSize: 14,
+    borderCollapse: "collapse",
+    fontSize: 17,
   },
-  blueText: { color: "#175cd3", fontWeight: 950 },
-  greenText: { color: "#067647", fontWeight: 950 },
-  orangeText: { color: "#b54708", fontWeight: 950 },
-  redText: { color: "#b42318", fontWeight: 950 },
+  blueText: { color: "#2563eb", fontWeight: 950 },
+  greenText: { color: "#16a34a", fontWeight: 950 },
+  orangeText: { color: "#ea580c", fontWeight: 950 },
+  redText: { color: "#dc2626", fontWeight: 950 },
   savedPill: {
-    display: "inline-flex",
-    alignItems: "center",
-    borderRadius: 999,
-    padding: "6px 10px",
+    display: "inline-block",
     background: "#dcfce7",
-    color: "#067647",
+    color: "#15803d",
+    padding: "6px 14px",
+    borderRadius: 999,
     fontWeight: 950,
-    fontSize: 12,
   },
   pendingPill: {
-    display: "inline-flex",
-    alignItems: "center",
-    borderRadius: 999,
-    padding: "6px 10px",
+    display: "inline-block",
     background: "#fff7ed",
-    color: "#b54708",
+    color: "#c2410c",
+    padding: "6px 14px",
+    borderRadius: 999,
     fontWeight: 950,
-    fontSize: 12,
   },
   rejectedPill: {
-    display: "inline-flex",
-    alignItems: "center",
-    borderRadius: 999,
-    padding: "6px 10px",
+    display: "inline-block",
     background: "#fee2e2",
-    color: "#b42318",
+    color: "#b91c1c",
+    padding: "6px 14px",
+    borderRadius: 999,
     fontWeight: 950,
-    fontSize: 12,
   },
   approveBtn: {
     border: "none",
-    borderRadius: 12,
-    background: "#dcfce7",
-    color: "#067647",
-    padding: "9px 12px",
+    color: "#fff",
+    background: "#16a34a",
+    borderRadius: 10,
+    padding: "8px 12px",
+    marginRight: 6,
     fontWeight: 950,
     cursor: "pointer",
-    margin: 3,
   },
   rejectBtn: {
-    border: "1px solid #fecaca",
-    borderRadius: 12,
-    background: "#fff5f5",
-    color: "#b42318",
-    padding: "9px 12px",
+    border: "none",
+    color: "#fff",
+    background: "#dc2626",
+    borderRadius: 10,
+    padding: "8px 12px",
     fontWeight: 950,
     cursor: "pointer",
-    margin: 3,
   },
   tableEditBtn: {
-    border: "none",
-    borderRadius: 12,
-    background: "#eef4ff",
-    color: "#175cd3",
-    padding: "9px 12px",
+    border: "1px solid #93c5fd",
+    color: "#1d4ed8",
+    background: "#eff6ff",
+    borderRadius: 10,
+    padding: "8px 10px",
+    marginRight: 6,
     fontWeight: 950,
     cursor: "pointer",
   },
   tableDeleteBtn: {
-    border: "none",
-    borderRadius: 12,
-    background: "#fff1f3",
-    color: "#b42318",
-    padding: "9px 12px",
+    border: "1px solid #fecaca",
+    color: "#dc2626",
+    background: "#fff",
+    borderRadius: 10,
+    padding: "8px 10px",
     fontWeight: 950,
     cursor: "pointer",
   },
   outlineBtn: {
-    minHeight: 44,
-    border: "1px solid #bbf7d0",
-    borderRadius: 16,
+    border: "1px solid #93c5fd",
     background: "#ffffff",
-    color: "#087443",
-    padding: "0 14px",
+    color: "#2563eb",
+    borderRadius: 12,
+    padding: "12px 18px",
+    fontSize: 18,
     fontWeight: 950,
     cursor: "pointer",
   },
   settleNote: {
     display: "flex",
-    gap: 12,
-    padding: 14,
-    borderRadius: 18,
-    background: "#eff6ff",
-    border: "1px solid #bfdbfe",
-    marginBottom: 14,
+    alignItems: "center",
+    gap: 18,
+    border: "1px solid #facc15",
+    background: "#fffbeb",
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 20,
   },
   noteIcon: {
-    fontSize: 22,
+    fontSize: 42,
   },
   noteTitle: {
-    fontSize: 16,
+    fontSize: 22,
     fontWeight: 950,
-    color: "#175cd3",
   },
   noteText: {
-    fontSize: 13,
-    fontWeight: 800,
-    color: "#344054",
-    lineHeight: 1.5,
     marginTop: 4,
+    fontSize: 17,
+    fontWeight: 850,
+    color: "#713f12",
   },
   adminCard: {
-    background: "rgba(255,255,255,.94)",
-    border: "1px solid rgba(226,232,240,.9)",
-    borderRadius: 26,
-    padding: 18,
-    marginBottom: 14,
-    boxShadow: "0 14px 32px rgba(16,24,40,.08)",
+    background: "#ffffff",
+    border: "1px solid #dbe3ef",
+    borderRadius: 18,
+    padding: 20,
+    marginBottom: 20,
   },
   adminControlBar: {
     display: "flex",
+    gap: 12,
     alignItems: "center",
-    gap: 10,
-    flexWrap: "wrap",
-    justifyContent: "flex-end",
   },
   inlineSelect: {
-    minHeight: 38,
-    borderRadius: 12,
-    border: "1px solid rgba(208,213,221,.9)",
+    minHeight: 44,
+    borderRadius: 10,
+    border: "1px solid #cbd5e1",
     background: "#fff",
-    color: "#101828",
-    fontSize: 13,
-    fontWeight: 900,
-    padding: "0 10px",
+    color: "#111827",
+    fontSize: 16,
+    fontWeight: 950,
+    padding: "0 12px",
   },
   adminSelect: {
-    minHeight: 44,
-    borderRadius: 14,
-    border: "1px solid rgba(208,213,221,.9)",
+    minHeight: 56,
+    borderRadius: 12,
+    border: "1px solid #cbd5e1",
     background: "#fff",
-    color: "#101828",
-    fontSize: 14,
-    fontWeight: 900,
-    padding: "0 12px",
+    color: "#111827",
+    fontSize: 18,
+    fontWeight: 950,
+    padding: "0 14px",
   },
   monthInput: {
-    minHeight: 44,
-    borderRadius: 14,
-    border: "1px solid rgba(208,213,221,.9)",
-    background: "#fff",
-    color: "#101828",
-    fontSize: 14,
-    fontWeight: 900,
-    padding: "0 12px",
+    minHeight: 56,
+    borderRadius: 12,
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    color: "#111827",
+    WebkitTextFillColor: "#111827",
+    fontSize: 18,
+    fontWeight: 950,
+    padding: "0 14px",
   },
   dashboardGrid: {
     display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: 10,
-    marginTop: 10,
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gap: 14,
   },
   dashBox: {
-    background: "linear-gradient(180deg, #ffffff, #f8fafc)",
-    border: "1px solid rgba(226,232,240,.9)",
-    borderRadius: 22,
-    padding: 14,
-    minHeight: 100,
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+    borderRadius: 16,
+    padding: 18,
   },
   dashBoxHighlight: {
-    background: "linear-gradient(180deg, #fff7ed, #ffffff)",
-    border: "1px solid #fed7aa",
-    borderRadius: 22,
-    padding: 14,
-    minHeight: 100,
+    background: "#eff6ff",
+    border: "1px solid #93c5fd",
+    borderRadius: 16,
+    padding: 18,
   },
   dashTitle: {
-    color: "#667085",
-    fontSize: 13,
-    fontWeight: 900,
+    color: "#64748b",
+    fontSize: 15,
+    fontWeight: 950,
   },
   dashValue: {
     marginTop: 8,
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 950,
-    color: "#101828",
+    color: "#111827",
   },
   dashSub: {
-    color: "#667085",
-    fontSize: 12,
+    marginTop: 8,
+    color: "#64748b",
+    fontSize: 13,
     fontWeight: 800,
-    marginTop: 7,
     lineHeight: 1.4,
   },
   emptyText: {
-    padding: 18,
-    color: "#667085",
-    fontSize: 14,
-    fontWeight: 850,
-    textAlign: "center",
+    padding: 20,
+    borderRadius: 14,
     background: "#f8fafc",
-    borderRadius: 18,
+    color: "#64748b",
+    textAlign: "center",
+    fontSize: 18,
+    fontWeight: 900,
   },
   warningBox: {
+    marginTop: 14,
     padding: 14,
-    borderRadius: 18,
+    borderRadius: 14,
     background: "#fff7ed",
-    border: "1px solid #fed7aa",
-    color: "#b54708",
-    fontWeight: 900,
-    lineHeight: 1.5,
-    marginBottom: 14,
+    border: "1px solid #fdba74",
+    color: "#9a3412",
+    fontWeight: 950,
   },
   successBox: {
+    marginTop: 14,
     padding: 14,
-    borderRadius: 18,
-    background: "#ecfdf3",
-    border: "1px solid #abefc6",
-    color: "#067647",
-    fontWeight: 900,
-    lineHeight: 1.5,
-    marginBottom: 14,
+    borderRadius: 14,
+    background: "#ecfdf5",
+    border: "1px solid #86efac",
+    color: "#166534",
+    fontWeight: 950,
   },
   noticeBox: {
+    marginTop: 14,
     padding: 14,
-    borderRadius: 18,
+    borderRadius: 14,
     background: "#eff6ff",
-    border: "1px solid #bfdbfe",
-    color: "#175cd3",
-    fontWeight: 900,
-    lineHeight: 1.5,
-    marginBottom: 14,
+    border: "1px solid #93c5fd",
+    color: "#1d4ed8",
+    fontWeight: 950,
   },
   label: {
-    fontSize: 13,
-    color: "#667085",
+    fontSize: 16,
+    color: "#475569",
     fontWeight: 950,
     marginBottom: 8,
   },
   bigInput: {
     width: "100%",
-    minHeight: 54,
-    borderRadius: 18,
-    border: "1px solid rgba(208,213,221,.9)",
-    background: "#fff",
-    color: "#101828",
-    WebkitTextFillColor: "#101828",
-    fontSize: 18,
-    fontWeight: 900,
-    padding: "0 14px",
+    minHeight: 66,
+    padding: "0 18px",
+    fontSize: 24,
+    borderRadius: 14,
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    color: "#111827",
+    WebkitTextFillColor: "#111827",
+    fontWeight: 950,
     boxSizing: "border-box",
   },
   modalOverlay: {
     position: "fixed",
     inset: 0,
-    background: "rgba(15,23,42,.36)",
+    background: "rgba(15,23,42,.58)",
+    zIndex: 10,
     display: "grid",
     placeItems: "center",
-    zIndex: 999,
-    padding: 18,
-    backdropFilter: "blur(12px)",
-    WebkitBackdropFilter: "blur(12px)",
+    padding: 20,
   },
   editModalCard: {
     width: "100%",
-    maxWidth: 390,
-    borderRadius: 28,
+    maxWidth: 620,
     background: "#fff",
-    border: "1px solid rgba(226,232,240,.9)",
-    padding: 20,
-    boxShadow: "0 28px 70px rgba(16,24,40,.22)",
+    borderRadius: 24,
+    padding: 26,
+    boxShadow: "0 24px 80px rgba(0,0,0,.28)",
   },
   modalTitle: {
-    fontSize: 22,
+    fontSize: 28,
     fontWeight: 950,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   editModalInfo: {
-    color: "#667085",
-    fontWeight: 850,
-    marginBottom: 14,
-    lineHeight: 1.45,
+    color: "#64748b",
+    fontWeight: 900,
+    marginBottom: 18,
   },
   modalActions: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: 10,
-    marginTop: 16,
+    display: "flex",
+    gap: 12,
+    marginTop: 18,
   },
   modalCancelBtn: {
-    minHeight: 52,
-    border: "1px solid #fecaca",
-    borderRadius: 18,
-    background: "#fff5f5",
-    color: "#b42318",
+    flex: 1,
+    border: "none",
+    background: "#e2e8f0",
+    color: "#334155",
+    borderRadius: 16,
+    padding: "18px",
+    fontSize: 20,
     fontWeight: 950,
     cursor: "pointer",
   },
   modalSaveBtn: {
-    minHeight: 52,
+    flex: 1,
     border: "none",
-    borderRadius: 18,
-    background: "linear-gradient(145deg, #099250, #087443)",
+    background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
     color: "#fff",
+    borderRadius: 16,
+    padding: "18px",
+    fontSize: 20,
     fontWeight: 950,
     cursor: "pointer",
   },
+
   employeeMonthCard: {
-    background: "rgba(255,255,255,.94)",
-    border: "1px solid rgba(226,232,240,.9)",
-    borderRadius: 26,
-    padding: 18,
-    marginBottom: 14,
-    boxShadow: "0 14px 32px rgba(16,24,40,.08)",
+    border: "1px solid #dbe3ef",
+    borderRadius: 18,
+    background: "#ffffff",
+    padding: 20,
+    marginBottom: 20,
   },
   personalSummaryGrid: {
     display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: 10,
-    marginBottom: 14,
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gap: 14,
   },
   metricSmall: {
     background: "#f8fafc",
-    border: "1px solid rgba(226,232,240,.9)",
-    borderRadius: 20,
-    padding: 14,
-    textAlign: "center",
+    border: "1px solid #e2e8f0",
+    borderRadius: 16,
+    padding: 16,
   },
   metricSmallDanger: {
-    background: "#fff1f3",
+    background: "#fff1f2",
     border: "1px solid #fecdd3",
-    borderRadius: 20,
-    padding: 14,
-    textAlign: "center",
+    borderRadius: 16,
+    padding: 16,
   },
   metricSmallTitle: {
-    color: "#667085",
-    fontSize: 12,
-    fontWeight: 900,
+    color: "#64748b",
+    fontSize: 15,
+    fontWeight: 950,
   },
   metricSmallValue: {
-    marginTop: 6,
-    fontSize: 22,
+    marginTop: 8,
+    fontSize: 26,
     fontWeight: 950,
-    color: "#101828",
+    color: "#111827",
   },
   paidBadge: {
     background: "#dcfce7",
-    color: "#067647",
-    border: "1px solid #bbf7d0",
+    color: "#15803d",
+    border: "1px solid #86efac",
     borderRadius: 999,
-    padding: "8px 12px",
-    fontSize: 13,
+    padding: "10px 16px",
+    fontSize: 18,
     fontWeight: 950,
   },
   unpaidBadge: {
     background: "#fff7ed",
-    color: "#b54708",
-    border: "1px solid #fed7aa",
+    color: "#c2410c",
+    border: "1px solid #fdba74",
     borderRadius: 999,
-    padding: "8px 12px",
-    fontSize: 13,
+    padding: "10px 16px",
+    fontSize: 18,
     fontWeight: 950,
   },
   paidPill: {
     display: "inline-block",
     background: "#dcfce7",
-    color: "#067647",
+    color: "#15803d",
     borderRadius: 999,
-    padding: "6px 10px",
+    padding: "6px 12px",
     fontWeight: 950,
-    fontSize: 12,
   },
   unpaidPill: {
     display: "inline-block",
     background: "#fff7ed",
-    color: "#b54708",
+    color: "#c2410c",
     borderRadius: 999,
-    padding: "6px 10px",
+    padding: "6px 12px",
     fontWeight: 950,
-    fontSize: 12,
   },
   storeSplitCard: {
     background: "#f8fafc",
-    border: "1px solid rgba(226,232,240,.9)",
-    borderRadius: 22,
+    border: "1px solid #e2e8f0",
+    borderRadius: 16,
     padding: 16,
   },
   storeName: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: 950,
     marginBottom: 10,
   },
   storeLine: {
-    color: "#667085",
-    fontSize: 14,
+    color: "#475569",
+    fontSize: 16,
     fontWeight: 850,
     marginTop: 6,
   },
   storePay: {
     marginTop: 10,
-    color: "#b42318",
-    fontSize: 18,
+    color: "#dc2626",
+    fontSize: 20,
     fontWeight: 950,
   },
   loadingPage: {
     minHeight: "100vh",
     display: "grid",
     placeItems: "center",
-    background: "linear-gradient(180deg, #f7faf9, #eef7f2)",
-    color: "#101828",
+    background: "#eef4fb",
+    color: "#111827",
     padding: 20,
   },
   loadingCard: {
     width: "100%",
-    maxWidth: 380,
+    maxWidth: 420,
     background: "#ffffff",
-    border: "1px solid rgba(226,232,240,.9)",
-    borderRadius: 28,
+    border: "1px solid #dbe3ef",
+    borderRadius: 22,
     padding: 24,
     textAlign: "center",
-    boxShadow: "0 24px 60px rgba(16,24,40,.14)",
   },
   loadingTitle: {
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: 950,
   },
   loadingText: {
     marginTop: 10,
-    color: "#667085",
+    color: "#64748b",
   },
   errorText: {
     marginTop: 12,
-    color: "#b42318",
+    color: "#dc2626",
     lineHeight: 1.5,
   },
   retryBtn: {
     marginTop: 14,
     border: "none",
     borderRadius: 999,
-    padding: "12px 16px",
-    fontWeight: 950,
+    padding: "10px 16px",
+    fontWeight: 900,
     cursor: "pointer",
-    background: "#f2f4f7",
   },
 };
 
-
-Object.assign(styles, {
-  page: {
-    minHeight: "100vh",
-    background: "linear-gradient(135deg, #eaf5ef 0%, #f7faf8 48%, #eef4fb 100%)",
-    color: "#0f172a",
-    padding: 0,
-    boxSizing: "border-box",
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Noto Sans TC', 'Segoe UI', system-ui, sans-serif",
-  },
-  appShell: {
-    width: "100%",
-    minHeight: "100vh",
-    display: "grid",
-    gridTemplateColumns: "240px minmax(0, 1fr)",
-    background: "transparent",
-  },
-  sidebar: {
-    position: "sticky",
-    top: 0,
-    height: "100vh",
-    background: "linear-gradient(180deg, #058047 0%, #035c35 58%, #024629 100%)",
-    color: "#fff",
-    padding: "26px 18px",
-    display: "flex",
-    flexDirection: "column",
-    boxShadow: "16px 0 48px rgba(3, 92, 53, .22)",
-    zIndex: 20,
-  },
-  brandBlock: {
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 28,
-    padding: "0 8px",
-  },
-  brandLogo: {
-    width: 56,
-    height: 40,
-    borderRadius: 999,
-    display: "grid",
-    placeItems: "center",
-    background: "rgba(255,255,255,.18)",
-    border: "1px solid rgba(255,255,255,.28)",
-    color: "#fff",
-    fontSize: 17,
-    fontWeight: 1000,
-    letterSpacing: -1,
-  },
-  brandTitle: {
-    fontSize: 20,
-    fontWeight: 1000,
-    lineHeight: 1.1,
-  },
-  brandSub: {
-    marginTop: 3,
-    fontSize: 12,
-    fontWeight: 850,
-    color: "rgba(255,255,255,.74)",
-  },
-  sideNav: {
-    display: "grid",
-    gap: 10,
-  },
-  sideNavItem: {
-    width: "100%",
-    minHeight: 52,
-    borderRadius: 14,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-    padding: "0 14px",
-    background: "rgba(255,255,255,.08)",
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: 950,
-    border: "1px solid rgba(255,255,255,.06)",
-    cursor: "pointer",
-    textAlign: "left",
-  },
-  sideNavItemActive: {
-    background: "rgba(255,255,255,.20)",
-    border: "1px solid rgba(255,255,255,.22)",
-    boxShadow: "inset 0 0 0 1px rgba(255,255,255,.08)",
-  },
-  sideBadge: {
-    minWidth: 26,
-    height: 26,
-    borderRadius: 999,
-    display: "inline-grid",
-    placeItems: "center",
-    background: "#ef4444",
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: 1000,
-    padding: "0 8px",
-  },
-  sideFooter: {
-    marginTop: "auto",
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-    padding: 14,
-    borderRadius: 18,
-    background: "rgba(255,255,255,.10)",
-    border: "1px solid rgba(255,255,255,.08)",
-  },
-  sideAvatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 999,
-    display: "grid",
-    placeItems: "center",
-    background: "#ffffff",
-    color: "#087443",
-    fontWeight: 1000,
-  },
-  sideUser: {
-    fontSize: 14,
-    fontWeight: 1000,
-  },
-  sideRole: {
-    marginTop: 3,
-    fontSize: 12,
-    fontWeight: 800,
-    color: "rgba(255,255,255,.70)",
-  },
-  mainShell: {
-    minWidth: 0,
-    padding: "18px 18px 28px",
-  },
-  topHeader: {
-    minHeight: 82,
-    padding: "18px 22px",
-    border: "1px solid rgba(226,232,240,.9)",
-    borderRadius: 22,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 16,
-    background: "rgba(255,255,255,.92)",
-    position: "sticky",
-    top: 18,
-    zIndex: 10,
-    backdropFilter: "blur(18px)",
-    WebkitBackdropFilter: "blur(18px)",
-    boxShadow: "0 18px 46px rgba(15,23,42,.08)",
-    marginBottom: 16,
-  },
-  appIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    display: "grid",
-    placeItems: "center",
-    background: "linear-gradient(145deg, #0f9f5f, #05743f)",
-    color: "#fff",
-    fontSize: 24,
-    boxShadow: "0 12px 24px rgba(5,116,63,.22)",
-    flex: "0 0 auto",
-  },
-  appTitle: {
-    fontSize: 24,
-    fontWeight: 1000,
-    letterSpacing: -0.5,
-    lineHeight: 1.1,
-    color: "#064e3b",
-  },
-  contentArea: {
-    display: "grid",
-    gridTemplateColumns: "minmax(360px, .9fr) minmax(520px, 1.25fr)",
-    gap: 16,
-    alignItems: "start",
-    padding: 0,
-  },
-  employeeHero: {
-    background: "linear-gradient(145deg, #0b8f53, #06603b)",
-    border: "1px solid rgba(255,255,255,.25)",
-    borderRadius: 22,
-    padding: 22,
-    marginBottom: 0,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 14,
-    boxShadow: "0 18px 38px rgba(5,96,58,.22)",
-    color: "#fff",
-  },
-  overviewCard: {
-    background: "rgba(255,255,255,.94)",
-    border: "1px solid rgba(226,232,240,.9)",
-    borderRadius: 22,
-    padding: 16,
-    marginBottom: 0,
-    boxShadow: "0 14px 34px rgba(15,23,42,.07)",
-  },
-  metricGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(4, minmax(0,1fr))",
-    gap: 12,
-  },
-  metricBox: {
-    background: "linear-gradient(180deg, #ffffff, #f8fafc)",
-    border: "1px solid rgba(226,232,240,.95)",
-    borderRadius: 18,
-    padding: 16,
-    minHeight: 112,
-    boxShadow: "0 8px 20px rgba(15,23,42,.04)",
-  },
-  metricIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    display: "grid",
-    placeItems: "center",
-    color: "#fff",
-    fontSize: 18,
-    marginBottom: 10,
-  },
-  entryCard: {
-    border: "1px solid rgba(226,232,240,.9)",
-    borderRadius: 22,
-    background: "rgba(255,255,255,.94)",
-    padding: 20,
-    marginBottom: 0,
-    boxShadow: "0 14px 34px rgba(15,23,42,.07)",
-  },
-  entryRow: {
-    display: "grid",
-    gridTemplateColumns: "minmax(180px, 1fr) 34px 190px",
-    gap: 12,
-    alignItems: "center",
-  },
-  recordsCard: {
-    background: "rgba(255,255,255,.94)",
-    border: "1px solid rgba(226,232,240,.9)",
-    borderRadius: 22,
-    padding: 20,
-    marginBottom: 0,
-    boxShadow: "0 14px 34px rgba(15,23,42,.07)",
-  },
-  adminCard: {
-    background: "rgba(255,255,255,.94)",
-    border: "1px solid rgba(226,232,240,.9)",
-    borderRadius: 22,
-    padding: 20,
-    marginBottom: 0,
-    boxShadow: "0 14px 34px rgba(15,23,42,.07)",
-  },
-  employeeMonthCard: {
-    background: "rgba(255,255,255,.94)",
-    border: "1px solid rgba(226,232,240,.9)",
-    borderRadius: 22,
-    padding: 20,
-    marginBottom: 0,
-    boxShadow: "0 14px 34px rgba(15,23,42,.07)",
-  },
-  settleNote: {
-    display: "flex",
-    gap: 12,
-    padding: 16,
-    borderRadius: 22,
-    background: "linear-gradient(180deg, #eff6ff, #f8fbff)",
-    border: "1px solid #bfdbfe",
-    marginBottom: 0,
-    boxShadow: "0 14px 34px rgba(15,23,42,.05)",
-  },
-  personalSummaryGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-    gap: 12,
-    marginBottom: 14,
-  },
-  dashboardGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-    gap: 12,
-    marginTop: 10,
-  },
-  tableWrap: {
-    overflowX: "auto",
-    border: "1px solid rgba(226,232,240,.9)",
-    borderRadius: 18,
-    background: "#fff",
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,.8)",
-  },
-  cleanTable: {
-    width: "100%",
-    borderCollapse: "separate",
-    borderSpacing: 0,
-    fontSize: 14,
-  },
-});
-
-
 const styleTag = document.createElement("style");
 styleTag.textContent = `
-  * { box-sizing: border-box; }
-  html {
-    background: #f6f7fb;
-  }
-  body {
-    margin: 0;
-    background: #f6f7fb;
-  }
   table th {
     text-align: center;
     background: #f8fafc;
-    color: #344054;
-    padding: 12px 10px;
+    color: #334155;
+    padding: 14px 12px;
     white-space: nowrap;
     font-weight: 950;
-    border-bottom: 1px solid #eaecf0;
-    font-size: 13px;
+    border-bottom: 1px solid #dbe3ef;
   }
   table td {
-    border-top: 1px solid #f2f4f7;
-    padding: 12px 10px;
+    border-top: 1px solid #e2e8f0;
+    padding: 14px 12px;
     white-space: nowrap;
     text-align: center;
     font-weight: 850;
-    color: #101828;
-    font-size: 13px;
-  }
-  table tr:hover td {
-    background: #f9fafb;
   }
   table td span {
-    color: #667085;
-    font-size: 12px;
+    color: #64748b;
+    font-size: 13px;
   }
   input,
   input[type="number"],
@@ -2432,42 +2023,23 @@ styleTag.textContent = `
   input[type="month"],
   input[type="password"],
   select {
-    color: #101828 !important;
-    -webkit-text-fill-color: #101828 !important;
-    caret-color: #099250 !important;
+    color: #111827 !important;
+    -webkit-text-fill-color: #111827 !important;
+    caret-color: #2563eb !important;
     background-color: #ffffff !important;
     opacity: 1 !important;
-    outline: none !important;
-  }
-  input:focus,
-  select:focus {
-    border-color: #16a34a !important;
-    box-shadow: 0 0 0 4px rgba(22,163,74,.12) !important;
   }
   input::placeholder {
-    color: #98a2b3 !important;
-    -webkit-text-fill-color: #98a2b3 !important;
+    color: #94a3b8 !important;
+    -webkit-text-fill-color: #94a3b8 !important;
     opacity: 1 !important;
   }
-  button, input, select {
+  button, input {
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
   }
-  button {
-    transition: transform .12s ease, filter .12s ease, box-shadow .12s ease;
-  }
-  button:active {
-    transform: scale(.98);
-    filter: brightness(.98);
-  }
-  @media (min-width: 901px) {
-    #root {
-      min-height: 100vh;
-    }
-  }
   @media (max-width: 900px) {
-    body { background: #f6f7fb; }
-    table th, table td { padding: 11px 8px; font-size: 12px; }
+    table th, table td { padding: 12px 8px; font-size: 14px; }
   }
 `;
 if (!document.getElementById("staff-meal-style")) {
@@ -2477,11 +2049,6 @@ if (!document.getElementById("staff-meal-style")) {
 
 
 if (window.innerWidth <= 900) {
-  styles.appShell.display = "block";
-  styles.appShell.minHeight = "100vh";
-  styles.sidebar.display = "none";
-  styles.mainShell.padding = "14px";
-  styles.contentArea.display = "block";
   styles.topHeader.flexDirection = "column";
   styles.topHeader.alignItems = "stretch";
   styles.headerRight.justifyContent = "stretch";
