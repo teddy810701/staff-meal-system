@@ -139,6 +139,20 @@ export default function App() {
   const [editingMeal, setEditingMeal] = useState(null);
   const [editMealAmount, setEditMealAmount] = useState("");
   const [editNote, setEditNote] = useState("");
+  const [activeSection, setActiveSection] = useState("首頁");
+
+  const goSection = (sectionId, label) => {
+    setActiveSection(label);
+    setTimeout(() => {
+      const target = document.getElementById(sectionId);
+      if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  };
+
+  const sideItemStyle = (label) => ({
+    ...styles.sideNavItem,
+    ...(activeSection === label ? styles.sideNavItemActive : {}),
+  });
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -750,6 +764,35 @@ export default function App() {
       ) : null}
 
       <div style={styles.appShell}>
+        <aside style={styles.sidebar}>
+          <div style={styles.brandBlock}>
+            <div style={styles.brandLogo}>MWD</div>
+            <div>
+              <div style={styles.brandTitle}>麥味登</div>
+              <div style={styles.brandSub}>Staff Meal</div>
+            </div>
+          </div>
+
+          <nav style={styles.sideNav}>
+            <button type="button" style={sideItemStyle("首頁")} onClick={() => goSection("home-section", "首頁")}>🏠 首頁</button>
+            <button type="button" style={sideItemStyle("員工餐登記")} onClick={() => goSection("meal-entry-section", "員工餐登記")}>🍴 員工餐登記</button>
+            <button type="button" style={sideItemStyle("店長審核")} onClick={() => goSection("manager-approval-section", "店長審核")}>✅ 店長審核 <span style={styles.sideBadge}>{managerPendingRecords.length}</span></button>
+            <button type="button" style={sideItemStyle("月結查帳")} onClick={() => goSection("monthly-report-section", "月結查帳")}>📊 月結查帳</button>
+            <button type="button" style={sideItemStyle("員工管理")} onClick={() => goSection("employee-setting-section", "員工管理")}>👥 員工管理</button>
+            <button type="button" style={sideItemStyle("打卡紀錄")} onClick={() => goSection("clock-record-section", "打卡紀錄")}>🕘 打卡紀錄</button>
+            <button type="button" style={sideItemStyle("系統設定")} onClick={() => goSection("system-setting-section", "系統設定")}>⚙️ 系統設定</button>
+          </nav>
+
+          <div style={styles.sideFooter}>
+            <div style={styles.sideAvatar}>管</div>
+            <div>
+              <div style={styles.sideUser}>{isAdmin ? "管理員模式" : isManager ? `${managerStore}店長` : "一般模式"}</div>
+              <div style={styles.sideRole}>員工餐補助系統</div>
+            </div>
+          </div>
+        </aside>
+
+        <div style={styles.mainShell}>
         <header style={styles.topHeader}>
           <div style={styles.headerLeft}>
             <div style={styles.appIcon}>🍴</div>
@@ -813,7 +856,7 @@ export default function App() {
           </div>
         </header>
 
-        <main style={styles.contentArea}>
+        <main id="home-section" style={styles.contentArea}>
           <section style={styles.employeeHero}>
             <div style={styles.employeeBlock}>
               <div style={styles.avatarCircle}>👤</div>
@@ -874,7 +917,7 @@ export default function App() {
             </section>
           ) : null}
 
-          <section style={styles.entryCard}>
+          <section id="meal-entry-section" style={styles.entryCard}>
             <div style={styles.cardTitleRow}>
               <div>
                 <div style={styles.cardTitle}>今日實際用餐金額</div>
@@ -916,7 +959,7 @@ export default function App() {
             {message ? <div style={message.includes("已儲存") ? styles.successBox : styles.warningBox}>{message}</div> : null}
           </section>
 
-          <section style={styles.recordsCard}>
+          <section id="clock-record-section" style={styles.recordsCard}>
             <div style={styles.cardTitleRow}>
               <div>
                 <div style={styles.cardTitle}>本月餐費紀錄</div>
@@ -969,7 +1012,7 @@ export default function App() {
           </section>
 
           {isManager ? (
-            <section style={styles.recordsCard}>
+            <section id="manager-approval-section" style={styles.recordsCard}>
               <div style={styles.cardTitleRow}>
                 <div>
                   <div style={styles.cardTitle}>{managerStore}店長審核</div>
@@ -1027,7 +1070,7 @@ export default function App() {
 
           {isAdmin ? (
             <>
-              <section style={styles.recordsCard}>
+              <section id="employee-setting-section" style={styles.recordsCard}>
                 <div style={styles.cardTitleRow}>
                   <div>
                     <div style={styles.cardTitle}>員工餐審核設定</div>
@@ -1081,7 +1124,7 @@ export default function App() {
                 )}
               </section>
 
-              <section style={styles.adminCard}>
+              <section id="system-setting-section" style={styles.adminCard}>
                 <div style={styles.cardTitleRow}>
                   <div>
                     <div style={styles.cardTitle}>管理模式 Dashboard</div>
@@ -1139,7 +1182,7 @@ export default function App() {
                 )}
               </section>
 
-              <section style={styles.recordsCard}>
+              <section id="monthly-report-section" style={styles.recordsCard}>
                 <div style={styles.cardTitleRow}>
                   <div>
                     <div style={styles.cardTitle}>月底結算</div>
@@ -1197,6 +1240,7 @@ export default function App() {
             </>
           ) : null}
         </main>
+        </div>
       </div>
     </div>
   );
@@ -2050,6 +2094,302 @@ const styles = {
   },
 };
 
+
+Object.assign(styles, {
+  page: {
+    minHeight: "100vh",
+    background: "linear-gradient(135deg, #eaf5ef 0%, #f7faf8 48%, #eef4fb 100%)",
+    color: "#0f172a",
+    padding: 0,
+    boxSizing: "border-box",
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Noto Sans TC', 'Segoe UI', system-ui, sans-serif",
+  },
+  appShell: {
+    width: "100%",
+    minHeight: "100vh",
+    display: "grid",
+    gridTemplateColumns: "240px minmax(0, 1fr)",
+    background: "transparent",
+  },
+  sidebar: {
+    position: "sticky",
+    top: 0,
+    height: "100vh",
+    background: "linear-gradient(180deg, #058047 0%, #035c35 58%, #024629 100%)",
+    color: "#fff",
+    padding: "26px 18px",
+    display: "flex",
+    flexDirection: "column",
+    boxShadow: "16px 0 48px rgba(3, 92, 53, .22)",
+    zIndex: 20,
+  },
+  brandBlock: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 28,
+    padding: "0 8px",
+  },
+  brandLogo: {
+    width: 56,
+    height: 40,
+    borderRadius: 999,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(255,255,255,.18)",
+    border: "1px solid rgba(255,255,255,.28)",
+    color: "#fff",
+    fontSize: 17,
+    fontWeight: 1000,
+    letterSpacing: -1,
+  },
+  brandTitle: {
+    fontSize: 20,
+    fontWeight: 1000,
+    lineHeight: 1.1,
+  },
+  brandSub: {
+    marginTop: 3,
+    fontSize: 12,
+    fontWeight: 850,
+    color: "rgba(255,255,255,.74)",
+  },
+  sideNav: {
+    display: "grid",
+    gap: 10,
+  },
+  sideNavItem: {
+    width: "100%",
+    minHeight: 52,
+    borderRadius: 14,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    padding: "0 14px",
+    background: "rgba(255,255,255,.08)",
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: 950,
+    border: "1px solid rgba(255,255,255,.06)",
+    cursor: "pointer",
+    textAlign: "left",
+  },
+  sideNavItemActive: {
+    background: "rgba(255,255,255,.20)",
+    border: "1px solid rgba(255,255,255,.22)",
+    boxShadow: "inset 0 0 0 1px rgba(255,255,255,.08)",
+  },
+  sideBadge: {
+    minWidth: 26,
+    height: 26,
+    borderRadius: 999,
+    display: "inline-grid",
+    placeItems: "center",
+    background: "#ef4444",
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: 1000,
+    padding: "0 8px",
+  },
+  sideFooter: {
+    marginTop: "auto",
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    borderRadius: 18,
+    background: "rgba(255,255,255,.10)",
+    border: "1px solid rgba(255,255,255,.08)",
+  },
+  sideAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 999,
+    display: "grid",
+    placeItems: "center",
+    background: "#ffffff",
+    color: "#087443",
+    fontWeight: 1000,
+  },
+  sideUser: {
+    fontSize: 14,
+    fontWeight: 1000,
+  },
+  sideRole: {
+    marginTop: 3,
+    fontSize: 12,
+    fontWeight: 800,
+    color: "rgba(255,255,255,.70)",
+  },
+  mainShell: {
+    minWidth: 0,
+    padding: "18px 18px 28px",
+  },
+  topHeader: {
+    minHeight: 82,
+    padding: "18px 22px",
+    border: "1px solid rgba(226,232,240,.9)",
+    borderRadius: 22,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 16,
+    background: "rgba(255,255,255,.92)",
+    position: "sticky",
+    top: 18,
+    zIndex: 10,
+    backdropFilter: "blur(18px)",
+    WebkitBackdropFilter: "blur(18px)",
+    boxShadow: "0 18px 46px rgba(15,23,42,.08)",
+    marginBottom: 16,
+  },
+  appIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    display: "grid",
+    placeItems: "center",
+    background: "linear-gradient(145deg, #0f9f5f, #05743f)",
+    color: "#fff",
+    fontSize: 24,
+    boxShadow: "0 12px 24px rgba(5,116,63,.22)",
+    flex: "0 0 auto",
+  },
+  appTitle: {
+    fontSize: 24,
+    fontWeight: 1000,
+    letterSpacing: -0.5,
+    lineHeight: 1.1,
+    color: "#064e3b",
+  },
+  contentArea: {
+    display: "grid",
+    gridTemplateColumns: "minmax(360px, .9fr) minmax(520px, 1.25fr)",
+    gap: 16,
+    alignItems: "start",
+    padding: 0,
+  },
+  employeeHero: {
+    background: "linear-gradient(145deg, #0b8f53, #06603b)",
+    border: "1px solid rgba(255,255,255,.25)",
+    borderRadius: 22,
+    padding: 22,
+    marginBottom: 0,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 14,
+    boxShadow: "0 18px 38px rgba(5,96,58,.22)",
+    color: "#fff",
+  },
+  overviewCard: {
+    background: "rgba(255,255,255,.94)",
+    border: "1px solid rgba(226,232,240,.9)",
+    borderRadius: 22,
+    padding: 16,
+    marginBottom: 0,
+    boxShadow: "0 14px 34px rgba(15,23,42,.07)",
+  },
+  metricGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, minmax(0,1fr))",
+    gap: 12,
+  },
+  metricBox: {
+    background: "linear-gradient(180deg, #ffffff, #f8fafc)",
+    border: "1px solid rgba(226,232,240,.95)",
+    borderRadius: 18,
+    padding: 16,
+    minHeight: 112,
+    boxShadow: "0 8px 20px rgba(15,23,42,.04)",
+  },
+  metricIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    display: "grid",
+    placeItems: "center",
+    color: "#fff",
+    fontSize: 18,
+    marginBottom: 10,
+  },
+  entryCard: {
+    border: "1px solid rgba(226,232,240,.9)",
+    borderRadius: 22,
+    background: "rgba(255,255,255,.94)",
+    padding: 20,
+    marginBottom: 0,
+    boxShadow: "0 14px 34px rgba(15,23,42,.07)",
+  },
+  entryRow: {
+    display: "grid",
+    gridTemplateColumns: "minmax(180px, 1fr) 34px 190px",
+    gap: 12,
+    alignItems: "center",
+  },
+  recordsCard: {
+    background: "rgba(255,255,255,.94)",
+    border: "1px solid rgba(226,232,240,.9)",
+    borderRadius: 22,
+    padding: 20,
+    marginBottom: 0,
+    boxShadow: "0 14px 34px rgba(15,23,42,.07)",
+  },
+  adminCard: {
+    background: "rgba(255,255,255,.94)",
+    border: "1px solid rgba(226,232,240,.9)",
+    borderRadius: 22,
+    padding: 20,
+    marginBottom: 0,
+    boxShadow: "0 14px 34px rgba(15,23,42,.07)",
+  },
+  employeeMonthCard: {
+    background: "rgba(255,255,255,.94)",
+    border: "1px solid rgba(226,232,240,.9)",
+    borderRadius: 22,
+    padding: 20,
+    marginBottom: 0,
+    boxShadow: "0 14px 34px rgba(15,23,42,.07)",
+  },
+  settleNote: {
+    display: "flex",
+    gap: 12,
+    padding: 16,
+    borderRadius: 22,
+    background: "linear-gradient(180deg, #eff6ff, #f8fbff)",
+    border: "1px solid #bfdbfe",
+    marginBottom: 0,
+    boxShadow: "0 14px 34px rgba(15,23,42,.05)",
+  },
+  personalSummaryGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gap: 12,
+    marginBottom: 14,
+  },
+  dashboardGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gap: 12,
+    marginTop: 10,
+  },
+  tableWrap: {
+    overflowX: "auto",
+    border: "1px solid rgba(226,232,240,.9)",
+    borderRadius: 18,
+    background: "#fff",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,.8)",
+  },
+  cleanTable: {
+    width: "100%",
+    borderCollapse: "separate",
+    borderSpacing: 0,
+    fontSize: 14,
+  },
+});
+
+
 const styleTag = document.createElement("style");
 styleTag.textContent = `
   * { box-sizing: border-box; }
@@ -2123,9 +2463,6 @@ styleTag.textContent = `
   @media (min-width: 901px) {
     #root {
       min-height: 100vh;
-      display: grid;
-      place-items: start center;
-      padding-top: 16px;
     }
   }
   @media (max-width: 900px) {
@@ -2140,6 +2477,11 @@ if (!document.getElementById("staff-meal-style")) {
 
 
 if (window.innerWidth <= 900) {
+  styles.appShell.display = "block";
+  styles.appShell.minHeight = "100vh";
+  styles.sidebar.display = "none";
+  styles.mainShell.padding = "14px";
+  styles.contentArea.display = "block";
   styles.topHeader.flexDirection = "column";
   styles.topHeader.alignItems = "stretch";
   styles.headerRight.justifyContent = "stretch";
