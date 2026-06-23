@@ -6,6 +6,17 @@ import { db, auth } from "./firebase";
 const ADMIN_PASSWORD = "8888";
 const ADMIN_DELETE_PIN = "1688";
 
+const MANAGER_PASSWORDS = {
+  "西螺": "a8888",
+  "斗南": "b8888",
+};
+
+const APPROVAL_STATUS_TEXT = {
+  pending: "待店長審核",
+  approved: "已通過",
+  rejected: "未通過",
+};
+
 const formatTaipeiDateKey = (ts = Date.now()) => {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
@@ -138,6 +149,10 @@ export default function App() {
 
   const [isAdmin, setIsAdmin] = useState(false);
   const [password, setPassword] = useState("");
+  const [isManager, setIsManager] = useState(false);
+  const [managerStore, setManagerStore] = useState("西螺");
+  const [managerLoginStore, setManagerLoginStore] = useState("西螺");
+  const [managerPassword, setManagerPassword] = useState("");
   const [selectedMonth, setSelectedMonth] = useState(getMonthValue());
   const [adminStoreFilter, setAdminStoreFilter] = useState("全部");
   const [editingMeal, setEditingMeal] = useState(null);
@@ -236,17 +251,21 @@ export default function App() {
 
   const mealCalc = useMemo(() => {
     const actualMealAmount = Number(mealAmount) || 0;
-    const subsidy = workInfo.subsidy || 0;
+    const calculatedSubsidy = workInfo.subsidy || 0;
+    const needApproval = Boolean(matchedEmployee?.mealApprovalRequired);
+    const subsidy = needApproval ? 0 : calculatedSubsidy;
     const overAmount = Math.max(0, actualMealAmount - subsidy);
     const employeePay = Math.round(overAmount * 0.9);
 
     return {
       actualMealAmount,
+      calculatedSubsidy,
       subsidy,
       overAmount,
       employeePay,
+      needApproval,
     };
-  }, [mealAmount, workInfo.subsidy]);
+  }, [mealAmount, workInfo.subsidy, matchedEmployee]);
 
   const todayMealList = useMemo(() => {
     return Object.values(mealRecords || {})
@@ -428,6 +447,15 @@ export default function App() {
     };
   }, [adminTodayRecords, adminMonthRecords]);
 
+  const managerPendingRecords = useMemo(() => {
+    if (!isManager) return [];
+    return Object.values(mealRecords || {})
+      .filter((item) => item && item.approvalRequired)
+      .filter((item) => (item.approvalStore || item.store || "") === managerStore)
+      .filter((item) => (item.approvalStatus || "approved") === "pending")
+      .sort((a, b) => String(b.dateKey || "").localeCompare(String(a.dateKey || "")) || String(a.name || "").localeCompare(String(b.name || "")));
+  }, [mealRecords, isManager, managerStore]);
+
 
   const selectedEmployeeMonthRecords = useMemo(() => {
     if (!selectedEmpKey) return [];
@@ -557,12 +585,16 @@ export default function App() {
       return;
     }
 
-    const subsidyAmount = Number(editingMeal.subsidyAmount) || 0;
+    const calculatedSubsidy = Number(editingMeal.calculatedSubsidyAmount ?? editingMeal.subsidyAmount) || 0;
+    const status = editingMeal.approvalStatus || "approved";
+    const subsidyAmount = editingMeal.approvalRequired && status !== "approved" ? 0 : calculatedSubsidy;
     const overAmount = Math.max(0, amount - subsidyAmount);
     const employeePay = Math.round(overAmount * 0.9);
 
     await update(ref(db, `meal_records/${editingMeal.dateKey}_${editingMeal.empId}`), {
       mealAmount: amount,
+      calculatedSubsidyAmount: calculatedSubsidy,
+      subsidyAmount,
       overAmount,
       employeePay,
       note: editNote.trim(),
@@ -639,6 +671,7 @@ export default function App() {
       return;
     }
 
+<<<<<<< HEAD
     const totals = auditMonthRows.reduce((acc, item) => {
       acc.workDays += item.hasAnyWork ? 1 : 0;
       acc.mealCount += item.hasMeal ? 1 : 0;
@@ -754,6 +787,28 @@ export default function App() {
         ${totalRow}
       </table>
     `;
+=======
+    const header = ["月份", "日期", "店別", "員工", "工號", "身分", "上班", "下班", "工時", "休息", "吃的金額", "原本可補貼", "實際補貼", "超出金額", "員工自付", "審核狀態", "備註"];
+    const rows = adminMonthRecords.map((item) => [
+      selectedMonth,
+      item.dateKey || "",
+      item.store || "",
+      item.name || "",
+      item.empId || "",
+      item.role || "",
+      formatTime(item.workInAt),
+      formatTime(item.workOutAt),
+      item.workHours || 0,
+      item.breakHours || 0,
+      item.mealAmount || 0,
+      item.calculatedSubsidyAmount ?? item.subsidyAmount ?? 0,
+      item.subsidyAmount || 0,
+      item.overAmount || 0,
+      item.employeePay || 0,
+      item.approvalRequired ? (APPROVAL_STATUS_TEXT[item.approvalStatus || "pending"] || item.approvalStatus || "") : "不需審核",
+      item.note || "",
+    ]);
+>>>>>>> 992b046 (新增員工餐店長審核功能)
 
     const storeText = adminStoreFilter === "全部" ? "全部店別" : adminStoreFilter;
     downloadExcelHtml(`員工餐月結查帳-${selectedMonth}-${storeText}.xls`, html);
@@ -793,6 +848,10 @@ export default function App() {
     const monthKey = getMonthKeyFromDateKey(mealDate);
     const now = Date.now();
 
+    const approvalRequired = Boolean(matchedEmployee.mealApprovalRequired);
+    const approvalStore = matchedEmployee.approvalStore || matchedEmployee.store || "";
+    const approvalStatus = approvalRequired ? "pending" : "approved";
+
     await set(ref(db, `meal_records/${mealKey}`), {
       empId: empKey,
       name: matchedEmployee.name || "",
@@ -807,17 +866,25 @@ export default function App() {
       breakHours: formatHours(workInfo.breakHours),
 
       mealAmount: amount,
+      calculatedSubsidyAmount: mealCalc.calculatedSubsidy,
       subsidyAmount: mealCalc.subsidy,
       overAmount: mealCalc.overAmount,
       discountRate: 0.9,
       employeePay: mealCalc.employeePay,
 
-      rule: "未滿4小時0元；滿4小時未滿6小時60元；滿6小時以上100元；超出補貼部分打9折",
+      approvalRequired,
+      approvalStore,
+      approvalStatus,
+
+      rule: "未滿4小時0元；滿4小時未滿6小時60元；滿6小時以上100元；超出補貼部分打9折；需審核員工須店長通過後才計入補助",
       createdAt: existingMealRecord?.createdAt || now,
       updatedAt: now,
     });
 
-    setMessage(`已儲存：${matchedEmployee.name}｜工時 ${formatHours(workInfo.workHours)} 小時｜補貼 ${mealCalc.subsidy} 元｜員工自付 ${mealCalc.employeePay} 元`);
+    setMessage(approvalRequired
+      ? `已儲存：${matchedEmployee.name}｜此員工需 ${approvalStore} 店長審核，通過後才會給補貼 ${mealCalc.calculatedSubsidy} 元｜目前員工自付 ${mealCalc.employeePay} 元`
+      : `已儲存：${matchedEmployee.name}｜工時 ${formatHours(workInfo.workHours)} 小時｜補貼 ${mealCalc.subsidy} 元｜員工自付 ${mealCalc.employeePay} 元`
+    );
     setMealAmount("");
   };
 
@@ -830,6 +897,57 @@ export default function App() {
     const ok = window.confirm(`確定刪除 ${item.name} ${item.dateKey} 的員工餐紀錄嗎？`);
     if (!ok) return;
     await remove(ref(db, `meal_records/${item.dateKey}_${item.empId}`));
+  };
+
+  const updateEmployeeApprovalSetting = async (employee, field, value) => {
+    await update(ref(db, `employees/${employee.id}`), {
+      [field]: value,
+    });
+  };
+
+  const approveMealRecord = async (item) => {
+    const calculatedSubsidy = Number(item.calculatedSubsidyAmount ?? getMealSubsidy(item.workHours)) || 0;
+    const mealAmountValue = Number(item.mealAmount) || 0;
+    const overAmount = Math.max(0, mealAmountValue - calculatedSubsidy);
+    const employeePay = Math.round(overAmount * 0.9);
+
+    await update(ref(db, `meal_records/${item.dateKey}_${item.empId}`), {
+      approvalStatus: "approved",
+      subsidyAmount: calculatedSubsidy,
+      overAmount,
+      employeePay,
+      updatedAt: Date.now(),
+    });
+  };
+
+  const rejectMealRecord = async (item) => {
+    const mealAmountValue = Number(item.mealAmount) || 0;
+    const overAmount = Math.max(0, mealAmountValue);
+    const employeePay = Math.round(overAmount * 0.9);
+
+    await update(ref(db, `meal_records/${item.dateKey}_${item.empId}`), {
+      approvalStatus: "rejected",
+      subsidyAmount: 0,
+      overAmount,
+      employeePay,
+      updatedAt: Date.now(),
+    });
+  };
+
+  const managerLogin = () => {
+    if (MANAGER_PASSWORDS[managerLoginStore] === managerPassword) {
+      setIsManager(true);
+      setManagerStore(managerLoginStore);
+      setManagerPassword("");
+      return;
+    }
+
+    alert("店長密碼錯誤");
+  };
+
+  const managerLogout = () => {
+    setIsManager(false);
+    setManagerPassword("");
   };
 
   const login = () => {
@@ -945,6 +1063,32 @@ export default function App() {
                 <button style={styles.adminBlueBtn} onClick={login}>管理模式</button>
               </>
             )}
+
+            {isManager ? (
+              <button style={styles.managerLogoutBtn} onClick={managerLogout}>{managerStore}店長登出</button>
+            ) : (
+              <>
+                <select
+                  style={styles.managerStoreSelect}
+                  value={managerLoginStore}
+                  onChange={(e) => setManagerLoginStore(e.target.value)}
+                >
+                  <option value="西螺">西螺店長</option>
+                  <option value="斗南">斗南店長</option>
+                </select>
+                <input
+                  style={styles.passwordInput}
+                  type="password"
+                  placeholder="店長密碼"
+                  value={managerPassword}
+                  onChange={(e) => setManagerPassword(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") managerLogin();
+                  }}
+                />
+                <button style={styles.managerBtn} onClick={managerLogin}>店長審核</button>
+              </>
+            )}
           </div>
         </header>
 
@@ -965,6 +1109,9 @@ export default function App() {
                     <div style={styles.employeeFound}>
                       {matchedEmployee.name}｜{matchedEmployee.store || "未填店名"}
                     </div>
+                    {matchedEmployee.mealApprovalRequired ? (
+                      <div style={styles.approvalHint}>此員工需 {matchedEmployee.approvalStore || matchedEmployee.store || "店長"} 審核後才給補助</div>
+                    ) : null}
                   </>
                 ) : empId.trim() ? (
                   <div style={styles.employeeNotFound}>找不到員工</div>
@@ -978,7 +1125,7 @@ export default function App() {
           <section style={styles.overviewCard}>
             <div style={styles.metricGrid}>
               <MetricBox icon="🕘" title="今日工時" value={`${formatHours(workInfo.workHours)} hr`} sub={`${formatTime(workInfo.workInAt)} - ${formatTime(workInfo.workOutAt)}｜休息 ${formatHours(workInfo.breakHours)}hr`} color="#2563eb" />
-              <MetricBox icon="💵" title="今日補貼" value={`${mealCalc.subsidy} 元`} sub={workInfo.workHours >= 6 ? "滿 6 小時以上" : workInfo.workHours >= 4 ? "滿 4 未滿 6 小時" : "未達補貼標準"} color="#16a34a" />
+              <MetricBox icon="💵" title="今日補貼" value={`${mealCalc.subsidy} 元`} sub={mealCalc.needApproval ? `需店長審核，通過後補貼 ${mealCalc.calculatedSubsidy} 元` : workInfo.workHours >= 6 ? "滿 6 小時以上" : workInfo.workHours >= 4 ? "滿 4 未滿 6 小時" : "未達補貼標準"} color="#16a34a" />
               <MetricBox icon="🍽️" title="今日餐費" value={`${mealCalc.actualMealAmount} 元`} sub="員工實際用餐金額" color="#ea580c" />
               <MetricBox icon="👛" title="今日自付金額" value={`${mealCalc.employeePay} 元`} sub="超出補貼金額 × 0.9" color="#dc2626" />
             </div>
@@ -1085,7 +1232,7 @@ export default function App() {
                         <td style={styles.greenText}>{item.subsidyAmount || 0} 元</td>
                         <td style={styles.orangeText}>{item.mealAmount || 0} 元</td>
                         <td style={styles.redText}>{item.employeePay || 0} 元</td>
-                        <td><span style={styles.savedPill}>已儲存</span></td>
+                        <td><span style={(item.approvalStatus || "approved") === "pending" ? styles.pendingPill : (item.approvalStatus || "approved") === "rejected" ? styles.rejectedPill : styles.savedPill}>{item.approvalRequired ? (APPROVAL_STATUS_TEXT[item.approvalStatus || "pending"] || "待店長審核") : "已儲存"}</span></td>
                         {isAdmin ? (
                           <td>
                             <button style={styles.tableEditBtn} onClick={() => openEditMeal(item)}>修改</button>
@@ -1100,6 +1247,55 @@ export default function App() {
             )}
           </section>
 
+          {isManager ? (
+            <section style={styles.recordsCard}>
+              <div style={styles.cardTitleRow}>
+                <div>
+                  <div style={styles.cardTitle}>{managerStore}店長審核</div>
+                  <div style={styles.cardSubTitle}>只顯示需要 {managerStore} 店長通過的員工餐資料</div>
+                </div>
+              </div>
+
+              {managerPendingRecords.length === 0 ? (
+                <div style={styles.emptyText}>目前沒有待審核資料</div>
+              ) : (
+                <div style={styles.tableWrap}>
+                  <table style={styles.cleanTable}>
+                    <thead>
+                      <tr>
+                        <th>日期</th>
+                        <th>員工</th>
+                        <th>店別</th>
+                        <th>工時</th>
+                        <th>餐費</th>
+                        <th>通過後補貼</th>
+                        <th>目前自付</th>
+                        <th>操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {managerPendingRecords.map((item) => (
+                        <tr key={`${item.dateKey}_${item.empId}`}>
+                          <td>{item.dateKey}</td>
+                          <td>{item.name}<br /><span>{item.empId}</span></td>
+                          <td>{item.store || "未填店名"}</td>
+                          <td style={styles.blueText}>{item.workHours || 0} hr</td>
+                          <td style={styles.orangeText}>{item.mealAmount || 0} 元</td>
+                          <td style={styles.greenText}>{item.calculatedSubsidyAmount ?? item.subsidyAmount ?? 0} 元</td>
+                          <td style={styles.redText}>{item.employeePay || 0} 元</td>
+                          <td>
+                            <button style={styles.approveBtn} onClick={() => approveMealRecord(item)}>通過</button>
+                            <button style={styles.rejectBtn} onClick={() => rejectMealRecord(item)}>不通過</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          ) : null}
+
           <section style={styles.settleNote}>
             <div style={styles.noteIcon}>🪙</div>
             <div>
@@ -1110,6 +1306,60 @@ export default function App() {
 
           {isAdmin ? (
             <>
+              <section style={styles.recordsCard}>
+                <div style={styles.cardTitleRow}>
+                  <div>
+                    <div style={styles.cardTitle}>員工餐審核設定</div>
+                    <div style={styles.cardSubTitle}>漏 key 過的員工可改成需店長審核，之後補助須通過才會計入</div>
+                  </div>
+                </div>
+
+                {employees.length === 0 ? (
+                  <div style={styles.emptyText}>目前沒有員工資料</div>
+                ) : (
+                  <div style={styles.tableWrap}>
+                    <table style={styles.cleanTable}>
+                      <thead>
+                        <tr>
+                          <th>員工</th>
+                          <th>店別</th>
+                          <th>需店長審核</th>
+                          <th>審核店別</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {employees.map((emp) => (
+                          <tr key={emp.id}>
+                            <td>{emp.name || "未填姓名"}<br /><span>{emp.empId || emp.id}</span></td>
+                            <td>{emp.store || "未填店名"}</td>
+                            <td>
+                              <select
+                                style={styles.inlineSelect}
+                                value={emp.mealApprovalRequired ? "是" : "否"}
+                                onChange={(e) => updateEmployeeApprovalSetting(emp, "mealApprovalRequired", e.target.value === "是")}
+                              >
+                                <option value="否">否</option>
+                                <option value="是">是</option>
+                              </select>
+                            </td>
+                            <td>
+                              <select
+                                style={styles.inlineSelect}
+                                value={emp.approvalStore || emp.store || "西螺"}
+                                onChange={(e) => updateEmployeeApprovalSetting(emp, "approvalStore", e.target.value)}
+                              >
+                                <option value="西螺">西螺</option>
+                                <option value="斗南">斗南</option>
+                              </select>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+
               <section style={styles.adminCard}>
                 <div style={styles.cardTitleRow}>
                   <div>
@@ -1190,6 +1440,7 @@ export default function App() {
                           <th>公司補貼</th>
                           <th>超出金額</th>
                           <th>員工自付</th>
+                          <th>審核</th>
                           <th>收款狀態</th>
                         </tr>
                       </thead>
@@ -1203,6 +1454,7 @@ export default function App() {
                             <td>{item.totalSubsidy}</td>
                             <td>{item.totalOverAmount}</td>
                             <td style={styles.redText}><b>{item.paid ? 0 : item.totalEmployeePay}</b></td>
+                            <td>—</td>
                             <td>
                               <span style={item.paid ? styles.paidPill : styles.unpaidPill}>
                                 {item.paid ? "已收款" : "未收款"}
@@ -1370,6 +1622,40 @@ const styles = {
   contentArea: {
     padding: 26,
   },
+  managerBtn: {
+    minHeight: 62,
+    border: "none",
+    borderRadius: 14,
+    background: "linear-gradient(135deg, #16a34a, #15803d)",
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: 950,
+    padding: "0 24px",
+    cursor: "pointer",
+    boxShadow: "0 10px 22px rgba(22,163,74,.18)",
+  },
+  managerLogoutBtn: {
+    minHeight: 62,
+    border: "none",
+    borderRadius: 14,
+    background: "linear-gradient(135deg, #16a34a, #15803d)",
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: 950,
+    padding: "0 24px",
+    cursor: "pointer",
+  },
+  managerStoreSelect: {
+    minHeight: 58,
+    borderRadius: 14,
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    color: "#111827",
+    fontSize: 18,
+    fontWeight: 950,
+    padding: "0 14px",
+  },
+
   employeeHero: {
     display: "flex",
     alignItems: "center",
@@ -1417,6 +1703,16 @@ const styles = {
     marginTop: 8,
     color: "#dc2626",
     fontWeight: 950,
+  },
+  approvalHint: {
+    marginTop: 8,
+    display: "inline-block",
+    border: "1px solid #fdba74",
+    color: "#c2410c",
+    borderRadius: 10,
+    padding: "6px 10px",
+    fontWeight: 950,
+    background: "#fff7ed",
   },
   heroNotice: {
     color: "#2563eb",
@@ -1571,6 +1867,41 @@ const styles = {
     borderRadius: 999,
     fontWeight: 950,
   },
+  pendingPill: {
+    display: "inline-block",
+    background: "#fff7ed",
+    color: "#c2410c",
+    padding: "6px 14px",
+    borderRadius: 999,
+    fontWeight: 950,
+  },
+  rejectedPill: {
+    display: "inline-block",
+    background: "#fee2e2",
+    color: "#b91c1c",
+    padding: "6px 14px",
+    borderRadius: 999,
+    fontWeight: 950,
+  },
+  approveBtn: {
+    border: "none",
+    color: "#fff",
+    background: "#16a34a",
+    borderRadius: 10,
+    padding: "8px 12px",
+    marginRight: 6,
+    fontWeight: 950,
+    cursor: "pointer",
+  },
+  rejectBtn: {
+    border: "none",
+    color: "#fff",
+    background: "#dc2626",
+    borderRadius: 10,
+    padding: "8px 12px",
+    fontWeight: 950,
+    cursor: "pointer",
+  },
   tableEditBtn: {
     border: "1px solid #93c5fd",
     color: "#1d4ed8",
@@ -1634,6 +1965,16 @@ const styles = {
     display: "flex",
     gap: 12,
     alignItems: "center",
+  },
+  inlineSelect: {
+    minHeight: 44,
+    borderRadius: 10,
+    border: "1px solid #cbd5e1",
+    background: "#fff",
+    color: "#111827",
+    fontSize: 16,
+    fontWeight: 950,
+    padding: "0 12px",
   },
   adminSelect: {
     minHeight: 56,
@@ -1959,7 +2300,8 @@ styleTag.textContent = `
   input[type="number"],
   input[type="date"],
   input[type="month"],
-  input[type="password"] {
+  input[type="password"],
+  select {
     color: #111827 !important;
     -webkit-text-fill-color: #111827 !important;
     caret-color: #2563eb !important;
@@ -1992,6 +2334,9 @@ if (window.innerWidth <= 900) {
   styles.headerDateInput.width = "100%";
   styles.passwordInput.width = "100%";
   styles.adminBlueBtn.width = "100%";
+  styles.managerBtn.width = "100%";
+  styles.managerLogoutBtn.width = "100%";
+  styles.managerStoreSelect.width = "100%";
   styles.employeeHero.flexDirection = "column";
   styles.employeeHero.alignItems = "stretch";
   styles.metricGrid.gridTemplateColumns = "1fr 1fr";
