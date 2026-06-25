@@ -327,11 +327,21 @@ export default function App() {
     };
   }, [adminTodayRecords, adminMonthRecords]);
 
+  const normalizeStoreName = (storeName = "") => {
+    const name = String(storeName || "").trim();
+    if (name.includes("西螺")) return "西螺";
+    if (name.includes("斗南")) return "斗南";
+    return name;
+  };
+
   const managerPendingRecords = useMemo(() => {
     if (!isManager) return [];
+
+    const currentManagerStore = normalizeStoreName(managerStore);
+
     return Object.values(mealRecords || {})
       .filter((item) => item && item.approvalRequired)
-      .filter((item) => (item.approvalStore || item.store || "") === managerStore)
+      .filter((item) => normalizeStoreName(item.approvalStore || item.store || "") === currentManagerStore)
       .filter((item) => (item.approvalStatus || "approved") === "pending")
       .sort((a, b) => String(b.dateKey || "").localeCompare(String(a.dateKey || "")) || String(a.name || "").localeCompare(String(b.name || "")));
   }, [mealRecords, isManager, managerStore]);
