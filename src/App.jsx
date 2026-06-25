@@ -11,6 +11,10 @@ const MANAGER_PASSWORDS = {
   "斗南": "b8888",
 };
 
+// 目前斗南還沒有店長，斗南的員工餐審核暫時全部交給西螺店長。
+// 之後斗南有店長時，把這裡改成 false 即可恢復斗南店長自行審核。
+const DOUNAN_DELEGATED_TO_XILUO = true;
+
 const APPROVAL_STATUS_TEXT = {
   pending: "待店長審核",
   approved: "已通過",
@@ -334,6 +338,15 @@ export default function App() {
     return name;
   };
 
+  const getEffectiveApprovalStore = (storeName = "") => {
+    const store = normalizeStoreName(storeName);
+
+    // 斗南目前由西螺店長代審，所以所有斗南待審核資料都歸到西螺店長畫面。
+    if (DOUNAN_DELEGATED_TO_XILUO && store === "斗南") return "西螺";
+
+    return store;
+  };
+
   const managerPendingRecords = useMemo(() => {
     if (!isManager) return [];
 
@@ -341,7 +354,7 @@ export default function App() {
 
     return Object.values(mealRecords || {})
       .filter((item) => item && item.approvalRequired)
-      .filter((item) => normalizeStoreName(item.approvalStore || item.store || "") === currentManagerStore)
+      .filter((item) => getEffectiveApprovalStore(item.approvalStore || item.store || "") === currentManagerStore)
       .filter((item) => (item.approvalStatus || "approved") === "pending")
       .sort((a, b) => String(b.dateKey || "").localeCompare(String(a.dateKey || "")) || String(a.name || "").localeCompare(String(b.name || "")));
   }, [mealRecords, isManager, managerStore]);
@@ -580,7 +593,8 @@ export default function App() {
     const now = Date.now();
 
     const approvalRequired = Boolean(matchedEmployee.mealApprovalRequired);
-    const approvalStore = matchedEmployee.approvalStore || matchedEmployee.store || "";
+    const originalApprovalStore = matchedEmployee.approvalStore || matchedEmployee.store || "";
+    const approvalStore = approvalRequired ? getEffectiveApprovalStore(originalApprovalStore) : originalApprovalStore;
     const approvalStatus = approvalRequired ? "pending" : "approved";
 
     await set(ref(db, `meal_records/${mealKey}`), {
@@ -983,7 +997,11 @@ export default function App() {
               <div style={styles.cardTitleRow}>
                 <div>
                   <div style={styles.cardTitle}>{managerStore}店長審核</div>
-                  <div style={styles.cardSubTitle}>只顯示需要 {managerStore} 店長通過的員工餐資料</div>
+                  <div style={styles.cardSubTitle}>
+                    {DOUNAN_DELEGATED_TO_XILUO && managerStore === "西螺"
+                      ? "目前斗南由西螺店長代審，這裡會顯示西螺與斗南的待審核資料"
+                      : `只顯示需要 ${managerStore} 店長通過的員工餐資料`}
+                  </div>
                 </div>
               </div>
 
@@ -1041,7 +1059,10 @@ export default function App() {
                 <div style={styles.cardTitleRow}>
                   <div>
                     <div style={styles.cardTitle}>員工餐審核設定</div>
-                    <div style={styles.cardSubTitle}>漏 key 過的員工可改成需店長審核，之後補助須通過才會計入</div>
+                    <div style={styles.cardSubTitle}>
+                      漏 key 過的員工可改成需店長審核，之後補助須通過才會計入
+                      {DOUNAN_DELEGATED_TO_XILUO ? "｜目前斗南由西螺店長代審" : ""}
+                    </div>
                   </div>
                 </div>
 
