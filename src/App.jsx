@@ -61,6 +61,16 @@ const getMealSubsidy = (workHours) => {
   return 100;
 };
 
+
+const escapeHtml = (value) => String(value ?? "")
+  .replace(/&/g, "&amp;")
+  .replace(/</g, "&lt;")
+  .replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;");
+
+const buildExcelCell = (value, className = "") => `<td class="${className}">${escapeHtml(value)}</td>`;
+const buildExcelNumberCell = (value, className = "") => `<td class="number ${className}">${Number(value) || 0}</td>`;
+
 const calculateEmployeeWork = (records = []) => {
   const sorted = [...records].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
 
@@ -230,23 +240,74 @@ export default function App() {
     return calculateEmployeeWork(selectedDayRecords);
   }, [selectedDayRecords]);
 
+
+  const getEmployeeMonthBalanceBeforeDate = (empKey, monthKey, beforeDateKey) => {
+    if (!empKey || !monthKey) return 0;
+    const targetEmpKey = normalizeEmpId(empKey);
+
+    const recordsByDate = {};
+    records.forEach((record) => {
+      const recordDateKey = record?.dateKey || (record?.createdAt ? formatTaipeiDateKey(record.createdAt) : "");
+      if (!recordDateKey || getMonthKeyFromDateKey(recordDateKey) !== monthKey) return;
+      if (recordDateKey >= beforeDateKey) return;
+      if (normalizeEmpId(record.empId) !== targetEmpKey) return;
+      if (!recordsByDate[recordDateKey]) recordsByDate[recordDateKey] = [];
+      recordsByDate[recordDateKey].push(record);
+    });
+
+    const mealsByDate = {};
+    Object.entries(mealRecords || {}).forEach(([key, item]) => {
+      if (key === "payments" || !item || typeof item !== "object") return;
+      if (!item.dateKey || getMonthKeyFromDateKey(item.dateKey) !== monthKey) return;
+      if (item.dateKey >= beforeDateKey) return;
+      if (normalizeEmpId(item.empId) !== targetEmpKey) return;
+      mealsByDate[item.dateKey] = item;
+    });
+
+    const dates = Array.from(new Set([...Object.keys(recordsByDate), ...Object.keys(mealsByDate)])).sort();
+    let balance = 0;
+
+    dates.forEach((dateKey) => {
+      const dayRecords = recordsByDate[dateKey] || [];
+      const work = calculateEmployeeWork(dayRecords);
+      const meal = mealsByDate[dateKey] || null;
+      const mealAmountValue = Number(meal?.mealAmount) || 0;
+      const mealNeedsApproval = Boolean(meal?.approvalRequired);
+      const mealApproved = !meal || !mealNeedsApproval || (meal.approvalStatus || "approved") === "approved";
+      const earnedSubsidy = work.canCalculate && mealApproved ? getMealSubsidy(work.workHours) : 0;
+      balance += earnedSubsidy;
+
+      if (meal && mealApproved) {
+        const usedSubsidy = Math.min(balance, mealAmountValue);
+        balance -= usedSubsidy;
+      }
+    });
+
+    return Math.max(0, Math.round(balance));
+  };
+
   const mealCalc = useMemo(() => {
     const actualMealAmount = Number(mealAmount) || 0;
     const calculatedSubsidy = workInfo.subsidy || 0;
     const needApproval = Boolean(matchedEmployee?.mealApprovalRequired);
-    const subsidy = needApproval ? 0 : calculatedSubsidy;
+    const monthKey = getMonthKeyFromDateKey(mealDate);
+    const previousBalance = getEmployeeMonthBalanceBeforeDate(selectedEmpKey, monthKey, mealDate);
+    const availableSubsidy = needApproval ? 0 : previousBalance + calculatedSubsidy;
+    const subsidy = Math.min(availableSubsidy, actualMealAmount);
     const overAmount = Math.max(0, actualMealAmount - subsidy);
     const employeePay = Math.round(overAmount * 0.9);
 
     return {
       actualMealAmount,
       calculatedSubsidy,
+      previousBalance,
+      availableSubsidy,
       subsidy,
       overAmount,
       employeePay,
       needApproval,
     };
-  }, [mealAmount, workInfo.subsidy, matchedEmployee]);
+  }, [mealAmount, workInfo.subsidy, matchedEmployee, selectedEmpKey, mealDate, records, mealRecords]);
 
   const todayMealList = useMemo(() => {
     return Object.values(mealRecords || {})
@@ -296,11 +357,142 @@ export default function App() {
   }, [employees, mealRecords]);
 
   const adminMonthRecords = useMemo(() => {
-    return Object.values(mealRecords || {})
-      .filter((item) => item && item.monthKey === selectedMonth)
+    const cleanStoreName = (storeName = "") => {
+      const name = String(storeName || "").trim();
+      if (name.includes("西螺")) return "西螺";
+      if (name.includes("斗南")) return "斗南";
+      return name || "未填店名";
+    };
+
+    const employeeMap = {};
+    employees.forEach((emp) => {
+      const key = emp.empId || emp.id;
+      if (!key) return;
+      employeeMap[normalizeEmpId(key)] = {
+        empId: key,
+        name: emp.name || key,
+        store: cleanStoreName(emp.store || "未填店名"),
+        role: emp.role || "未設定",
+      };
+    });
+
+    const recordsByEmpDate = {};
+    records.forEach((record) => {
+      const recordDateKey = record?.dateKey || (record?.createdAt ? formatTaipeiDateKey(record.createdAt) : "");
+      if (!recordDateKey || getMonthKeyFromDateKey(recordDateKey) !== selectedMonth) return;
+      const empKey = normalizeEmpId(record.empId);
+      if (!empKey) return;
+      const rowKey = `${empKey}_${recordDateKey}`;
+      if (!recordsByEmpDate[rowKey]) recordsByEmpDate[rowKey] = [];
+      recordsByEmpDate[rowKey].push(record);
+
+      if (!employeeMap[empKey]) {
+        employeeMap[empKey] = {
+          empId: record.empId || empKey,
+          name: record.name || empKey,
+          store: cleanStoreName(record.store || "未填店名"),
+          role: record.role || "未設定",
+        };
+      }
+    });
+
+    const mealsByEmpDate = {};
+    Object.entries(mealRecords || {}).forEach(([key, meal]) => {
+      if (key === "payments" || !meal || typeof meal !== "object") return;
+      if (!meal.dateKey || getMonthKeyFromDateKey(meal.dateKey) !== selectedMonth) return;
+      const empKey = normalizeEmpId(meal.empId);
+      if (!empKey) return;
+      mealsByEmpDate[`${empKey}_${meal.dateKey}`] = meal;
+
+      if (!employeeMap[empKey]) {
+        employeeMap[empKey] = {
+          empId: meal.empId || empKey,
+          name: meal.name || empKey,
+          store: cleanStoreName(meal.store || "未填店名"),
+          role: meal.role || "未設定",
+        };
+      }
+    });
+
+    const keysByEmp = {};
+    Array.from(new Set([...Object.keys(recordsByEmpDate), ...Object.keys(mealsByEmpDate)])).forEach((rowKey) => {
+      const [empKey] = rowKey.split("_");
+      if (!keysByEmp[empKey]) keysByEmp[empKey] = [];
+      keysByEmp[empKey].push(rowKey);
+    });
+
+    const rows = [];
+
+    Object.entries(keysByEmp).forEach(([empKey, rowKeys]) => {
+      let balance = 0;
+      rowKeys.sort((a, b) => {
+        const dateA = a.split("_")[1] || "";
+        const dateB = b.split("_")[1] || "";
+        return dateA.localeCompare(dateB);
+      }).forEach((rowKey) => {
+        const dateKey = rowKey.split("_")[1] || "";
+        const emp = employeeMap[empKey] || { empId: empKey, name: empKey, store: "未填店名", role: "未設定" };
+        const dayRecords = recordsByEmpDate[rowKey] || [];
+        const work = calculateEmployeeWork(dayRecords);
+        const meal = mealsByEmpDate[rowKey] || null;
+        const hasMeal = Boolean(meal);
+        const hasAnyWork = work.hasWorkIn || work.hasWorkOut;
+        const workHours = work.canCalculate ? formatHours(work.workHours) : 0;
+        const breakHours = work.canCalculate ? formatHours(work.breakHours) : 0;
+        const dailySubsidy = work.canCalculate ? getMealSubsidy(work.workHours) : 0;
+        const mealAmount = hasMeal ? Number(meal.mealAmount) || 0 : 0;
+        const mealNeedsApproval = Boolean(meal?.approvalRequired);
+        const approvalStatus = meal?.approvalStatus || (mealNeedsApproval ? "pending" : "approved");
+        const mealApproved = !hasMeal || !mealNeedsApproval || approvalStatus === "approved";
+        const earnedSubsidyAmount = work.canCalculate && mealApproved ? dailySubsidy : 0;
+        const balanceBeforeUse = balance + earnedSubsidyAmount;
+        const usedSubsidyAmount = hasMeal && mealApproved ? Math.min(balanceBeforeUse, mealAmount) : 0;
+        const unpaidBeforeDiscount = hasMeal ? Math.max(0, mealAmount - usedSubsidyAmount) : 0;
+        const employeePay = Math.round(unpaidBeforeDiscount * 0.9);
+        balance = Math.max(0, balanceBeforeUse - usedSubsidyAmount);
+
+        let status = "補助累積";
+        if (hasMeal && mealNeedsApproval && approvalStatus === "pending") status = "待審核";
+        else if (hasMeal && mealNeedsApproval && approvalStatus === "rejected") status = "未通過";
+        else if (hasMeal && employeePay > 0) status = "超額";
+        else if (hasMeal) status = "已抵扣";
+        if (hasMeal && !hasAnyWork) status = "無上班紀錄";
+        if (hasAnyWork && !work.canCalculate) status = "工時異常";
+
+        rows.push({
+          key: meal?.key || `${dateKey}_${emp.empId}`,
+          dateKey,
+          monthKey: selectedMonth,
+          store: cleanStoreName(meal?.store || emp.store || "未填店名"),
+          name: meal?.name || emp.name || emp.empId,
+          empId: meal?.empId || emp.empId || empKey,
+          role: meal?.role || emp.role || "未設定",
+          workInAt: work.workInAt || meal?.workInAt || 0,
+          workOutAt: work.workOutAt || meal?.workOutAt || 0,
+          workHours,
+          breakHours,
+          hasMeal,
+          hasAnyWork,
+          mealAmount,
+          calculatedSubsidyAmount: dailySubsidy,
+          earnedSubsidyAmount,
+          subsidyAmount: usedSubsidyAmount,
+          usedSubsidyAmount,
+          overAmount: unpaidBeforeDiscount,
+          employeePay,
+          balanceAfter: balance,
+          approvalRequired: mealNeedsApproval,
+          approvalStatus,
+          status,
+          note: meal?.note || "",
+        });
+      });
+    });
+
+    return rows
       .filter((item) => adminStoreFilter === "全部" || (item.store || "未填店名") === adminStoreFilter)
-      .sort((a, b) => String(b.dateKey || "").localeCompare(String(a.dateKey || "")) || String(a.name || "").localeCompare(String(b.name || "")));
-  }, [mealRecords, selectedMonth, adminStoreFilter]);
+      .sort((a, b) => String(b.dateKey || "").localeCompare(String(a.dateKey || "")) || String(a.name || "").localeCompare(String(b.name || ""), "zh-Hant"));
+  }, [employees, records, mealRecords, selectedMonth, adminStoreFilter]);
 
   const adminTodayRecords = useMemo(() => {
     return Object.values(mealRecords || {})
@@ -311,16 +503,18 @@ export default function App() {
   const adminDashboard = useMemo(() => {
     const sum = (list, key) => list.reduce((total, item) => total + (Number(item[key]) || 0), 0);
     const todayTop = [...adminTodayRecords].sort((a, b) => (Number(b.mealAmount) || 0) - (Number(a.mealAmount) || 0))[0];
-    const monthTop = [...adminMonthRecords].sort((a, b) => (Number(b.employeePay) || 0) - (Number(a.employeePay) || 0))[0];
+    const monthTop = [...adminMonthRecords].filter((item) => item.hasMeal).sort((a, b) => (Number(b.employeePay) || 0) - (Number(a.employeePay) || 0))[0];
 
     return {
       todayCount: adminTodayRecords.length,
       todayMealAmount: sum(adminTodayRecords, "mealAmount"),
       todaySubsidy: sum(adminTodayRecords, "subsidyAmount"),
       todayEmployeePay: sum(adminTodayRecords, "employeePay"),
-      monthCount: adminMonthRecords.length,
+      monthCount: adminMonthRecords.filter((item) => item.hasMeal).length,
+      monthWorkDays: adminMonthRecords.filter((item) => item.hasAnyWork).length,
       monthMealAmount: sum(adminMonthRecords, "mealAmount"),
-      monthSubsidy: sum(adminMonthRecords, "subsidyAmount"),
+      monthEarnedSubsidy: sum(adminMonthRecords, "earnedSubsidyAmount"),
+      monthUsedSubsidy: sum(adminMonthRecords, "usedSubsidyAmount"),
       monthEmployeePay: sum(adminMonthRecords, "employeePay"),
       todayTop,
       monthTop,
@@ -350,26 +544,31 @@ export default function App() {
   const selectedEmployeeMonthRecords = useMemo(() => {
     if (!selectedEmpKey) return [];
     const monthKey = getMonthKeyFromDateKey(mealDate);
-    return Object.values(mealRecords || {})
-      .filter((item) => item && item.dateKey && normalizeEmpId(item.empId) === normalizeEmpId(selectedEmpKey))
-      .filter((item) => item.monthKey === monthKey)
+    return adminMonthRecords
+      .filter((item) => item.monthKey === monthKey && normalizeEmpId(item.empId) === normalizeEmpId(selectedEmpKey))
       .sort((a, b) => String(b.dateKey || "").localeCompare(String(a.dateKey || "")));
-  }, [mealRecords, selectedEmpKey, mealDate]);
+  }, [adminMonthRecords, selectedEmpKey, mealDate]);
 
   const selectedEmployeePaymentKey = selectedEmpKey ? `${getMonthKeyFromDateKey(mealDate)}_${selectedEmpKey}` : "";
   const paymentRecords = mealRecords?.payments || {};
 
   const employeeMonthSummary = useMemo(() => {
     const totalMealAmount = selectedEmployeeMonthRecords.reduce((sum, item) => sum + (Number(item.mealAmount) || 0), 0);
-    const totalSubsidy = selectedEmployeeMonthRecords.reduce((sum, item) => sum + (Number(item.subsidyAmount) || 0), 0);
+    const totalEarnedSubsidy = selectedEmployeeMonthRecords.reduce((sum, item) => sum + (Number(item.earnedSubsidyAmount) || 0), 0);
+    const totalUsedSubsidy = selectedEmployeeMonthRecords.reduce((sum, item) => sum + (Number(item.usedSubsidyAmount) || 0), 0);
     const totalEmployeePay = selectedEmployeeMonthRecords.reduce((sum, item) => sum + (Number(item.employeePay) || 0), 0);
+    const endingBalance = selectedEmployeeMonthRecords.length ? Number(selectedEmployeeMonthRecords[selectedEmployeeMonthRecords.length - 1].balanceAfter) || 0 : 0;
     const paidRecord = selectedEmployeePaymentKey ? paymentRecords[selectedEmployeePaymentKey] : null;
 
     return {
       monthKey: getMonthKeyFromDateKey(mealDate),
-      days: selectedEmployeeMonthRecords.length,
+      days: selectedEmployeeMonthRecords.filter((item) => item.hasAnyWork).length,
+      mealDays: selectedEmployeeMonthRecords.filter((item) => item.hasMeal).length,
       totalMealAmount,
-      totalSubsidy,
+      totalEarnedSubsidy,
+      totalUsedSubsidy,
+      totalSubsidy: totalUsedSubsidy,
+      endingBalance,
       totalEmployeePay,
       isPaid: Boolean(paidRecord?.paid),
     };
@@ -377,7 +576,9 @@ export default function App() {
 
   const filteredMonthlySummary = useMemo(() => {
     const map = {};
-    adminMonthRecords.forEach((item) => {
+    const orderedRows = [...adminMonthRecords].sort((a, b) => String(a.dateKey || "").localeCompare(String(b.dateKey || "")));
+
+    orderedRows.forEach((item) => {
       const key = item.empId || item.name || "UNKNOWN";
       if (!map[key]) {
         map[key] = {
@@ -385,18 +586,28 @@ export default function App() {
           name: item.name || "",
           store: item.store || "",
           days: 0,
+          mealDays: 0,
           totalMealAmount: 0,
+          totalEarnedSubsidy: 0,
+          totalUsedSubsidy: 0,
           totalSubsidy: 0,
           totalOverAmount: 0,
           totalEmployeePay: 0,
+          endingBalance: 0,
+          pendingCount: 0,
         };
       }
 
-      map[key].days += 1;
+      if (item.hasAnyWork) map[key].days += 1;
+      if (item.hasMeal) map[key].mealDays += 1;
       map[key].totalMealAmount += Number(item.mealAmount) || 0;
-      map[key].totalSubsidy += Number(item.subsidyAmount) || 0;
+      map[key].totalEarnedSubsidy += Number(item.earnedSubsidyAmount) || 0;
+      map[key].totalUsedSubsidy += Number(item.usedSubsidyAmount) || 0;
+      map[key].totalSubsidy = map[key].totalUsedSubsidy;
       map[key].totalOverAmount += Number(item.overAmount) || 0;
       map[key].totalEmployeePay += Number(item.employeePay) || 0;
+      map[key].endingBalance = Number(item.balanceAfter) || 0;
+      if (item.status === "待審核") map[key].pendingCount += 1;
     });
 
     return Object.values(map).sort((a, b) => b.totalEmployeePay - a.totalEmployeePay);
@@ -415,12 +626,17 @@ export default function App() {
     adminMonthRecords.forEach((item) => {
       const store = item.store || "未填店名";
       if (!map[store]) {
-        map[store] = { store, days: 0, totalMealAmount: 0, totalSubsidy: 0, totalEmployeePay: 0 };
+        map[store] = { store, days: 0, mealDays: 0, totalMealAmount: 0, totalEarnedSubsidy: 0, totalUsedSubsidy: 0, totalSubsidy: 0, totalEmployeePay: 0, endingBalance: 0 };
       }
-      map[store].days += 1;
+      if (item.hasAnyWork) map[store].days += 1;
+      if (item.hasMeal) map[store].mealDays += 1;
       map[store].totalMealAmount += Number(item.mealAmount) || 0;
-      map[store].totalSubsidy += Number(item.subsidyAmount) || 0;
+      map[store].totalEarnedSubsidy += Number(item.earnedSubsidyAmount) || 0;
+      map[store].totalUsedSubsidy += Number(item.usedSubsidyAmount) || 0;
+      map[store].totalSubsidy = map[store].totalUsedSubsidy;
       map[store].totalEmployeePay += Number(item.employeePay) || 0;
+      map[store].endingBalance += Number(item.earnedSubsidyAmount) || 0;
+      map[store].endingBalance -= Number(item.usedSubsidyAmount) || 0;
     });
     return Object.values(map).sort((a, b) => b.totalEmployeePay - a.totalEmployeePay);
   }, [adminMonthRecords]);
@@ -498,13 +714,35 @@ export default function App() {
     alert("員工餐紀錄已修改");
   };
 
-  const downloadCsv = (filename, header, rows) => {
-    const csv = [header, ...rows]
-      .map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","))
-      .join("\\n");
+  const downloadExcelHtml = (filename, html) => {
+    const excelFile = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office"
+            xmlns:x="urn:schemas-microsoft-com:office:excel"
+            xmlns="http://www.w3.org/TR/REC-html40">
+        <head>
+          <meta charset="UTF-8" />
+          <style>
+            body { font-family: Arial, 'Microsoft JhengHei', sans-serif; }
+            table { border-collapse: collapse; font-size: 11pt; }
+            th, td { border: 1px solid #999; padding: 6px 8px; text-align: center; white-space: nowrap; mso-number-format:'\@'; }
+            th { background: #d9ead3; font-weight: bold; }
+            .title { font-size: 18pt; font-weight: bold; background: #1f4e79; color: #fff; text-align: left; }
+            .summaryLabel { background: #eef2ff; font-weight: bold; text-align: left; }
+            .summaryValue { background: #fff; font-weight: bold; color: #0f172a; }
+            .number { mso-number-format:'0'; }
+            .hours { mso-number-format:'0.00'; }
+            .ok { color: #166534; }
+            .over { color: #b91c1c; font-weight: bold; }
+            .pending { background: #fff7ed; color: #92400e; font-weight: bold; }
+            .rejected { background: #fee2e2; color: #b91c1c; font-weight: bold; }
+            .subtotal { background: #fff2cc; font-weight: bold; }
+          </style>
+        </head>
+        <body>${html}</body>
+      </html>`;
 
-    const blob = new Blob(["\\uFEFF" + csv], {
-      type: "text/csv;charset=utf-8;",
+    const blob = new Blob(["\uFEFF" + excelFile], {
+      type: "application/vnd.ms-excel;charset=utf-8;",
     });
 
     const link = document.createElement("a");
@@ -520,29 +758,95 @@ export default function App() {
       return;
     }
 
-    const header = ["月份", "日期", "店別", "員工", "工號", "身分", "上班", "下班", "工時", "休息", "吃的金額", "原本可補貼", "實際補貼", "超出金額", "員工自付", "審核狀態", "備註"];
-    const rows = adminMonthRecords.map((item) => [
-      selectedMonth,
-      item.dateKey || "",
-      item.store || "",
-      item.name || "",
-      item.empId || "",
-      item.role || "",
-      formatTime(item.workInAt),
-      formatTime(item.workOutAt),
-      item.workHours || 0,
-      item.breakHours || 0,
-      item.mealAmount || 0,
-      item.calculatedSubsidyAmount ?? item.subsidyAmount ?? 0,
-      item.subsidyAmount || 0,
-      item.overAmount || 0,
-      item.employeePay || 0,
-      item.approvalRequired ? (APPROVAL_STATUS_TEXT[item.approvalStatus || "pending"] || item.approvalStatus || "") : "不需審核",
-      item.note || "",
-    ]);
+    const totals = adminMonthRecords.reduce((acc, item) => {
+      acc.workDays += item.hasAnyWork ? 1 : 0;
+      acc.mealDays += item.hasMeal ? 1 : 0;
+      acc.mealAmount += Number(item.mealAmount) || 0;
+      acc.earnedSubsidy += Number(item.earnedSubsidyAmount) || 0;
+      acc.usedSubsidy += Number(item.usedSubsidyAmount) || 0;
+      acc.balance += Number(item.earnedSubsidyAmount) || 0;
+      acc.balance -= Number(item.usedSubsidyAmount) || 0;
+      acc.employeePay += Number(item.employeePay) || 0;
+      acc.pendingCount += item.status === "待審核" ? 1 : 0;
+      return acc;
+    }, { workDays: 0, mealDays: 0, mealAmount: 0, earnedSubsidy: 0, usedSubsidy: 0, balance: 0, employeePay: 0, pendingCount: 0 });
+
+    const summaryRows = [
+      ["月份", selectedMonth, "店別", adminStoreFilter],
+      ["上班天數", totals.workDays, "用餐筆數", totals.mealDays],
+      ["本月累積補助", totals.earnedSubsidy, "已使用補助", totals.usedSubsidy],
+      ["月底剩餘補助", Math.max(0, totals.balance), "員工自付總額", totals.employeePay],
+      ["待審核筆數", totals.pendingCount, "產生時間", new Date().toLocaleString("zh-TW", { hour12: false })],
+    ].map((row) => `
+      <tr>
+        ${buildExcelCell(row[0], "summaryLabel")}
+        ${buildExcelCell(row[1], "summaryValue")}
+        ${buildExcelCell(row[2], "summaryLabel")}
+        ${buildExcelCell(row[3], "summaryValue")}
+        <td colspan="13"></td>
+      </tr>
+    `).join("");
+
+    const header = `
+      <tr>
+        <th>月份</th><th>日期</th><th>店別</th><th>員工</th><th>工號</th><th>身分</th>
+        <th>上班</th><th>下班</th><th>工時</th><th>休息</th><th>吃的金額</th>
+        <th>當日新增補助</th><th>本次使用補助</th><th>餐後補助餘額</th><th>員工自付</th><th>狀態</th><th>備註</th>
+      </tr>
+    `;
+
+    const rows = adminMonthRecords.map((item) => {
+      const statusClass = item.status === "待審核" ? "pending" : item.status === "未通過" ? "rejected" : item.employeePay > 0 ? "over" : "ok";
+      return `
+        <tr>
+          ${buildExcelCell(selectedMonth)}
+          ${buildExcelCell(item.dateKey || "")}
+          ${buildExcelCell(item.store || "")}
+          ${buildExcelCell(item.name || "")}
+          ${buildExcelCell(item.empId || "")}
+          ${buildExcelCell(item.role || "")}
+          ${buildExcelCell(formatTime(item.workInAt))}
+          ${buildExcelCell(formatTime(item.workOutAt))}
+          ${buildExcelNumberCell(item.workHours || 0, "hours")}
+          ${buildExcelNumberCell(item.breakHours || 0, "hours")}
+          ${buildExcelNumberCell(item.mealAmount || 0)}
+          ${buildExcelNumberCell(item.earnedSubsidyAmount || 0)}
+          ${buildExcelNumberCell(item.usedSubsidyAmount || 0)}
+          ${buildExcelNumberCell(item.balanceAfter || 0)}
+          ${buildExcelNumberCell(item.employeePay || 0, item.employeePay > 0 ? "over" : "")}
+          ${buildExcelCell(item.status || "", statusClass)}
+          ${buildExcelCell(item.note || "")}
+        </tr>
+      `;
+    }).join("");
+
+    const totalRow = `
+      <tr class="subtotal">
+        <td colspan="8">合計</td>
+        ${buildExcelNumberCell("")}
+        ${buildExcelNumberCell("")}
+        ${buildExcelNumberCell(totals.mealAmount)}
+        ${buildExcelNumberCell(totals.earnedSubsidy)}
+        ${buildExcelNumberCell(totals.usedSubsidy)}
+        ${buildExcelNumberCell(Math.max(0, totals.balance))}
+        ${buildExcelNumberCell(totals.employeePay, totals.employeePay > 0 ? "over" : "")}
+        <td colspan="2">待審核 ${totals.pendingCount} 筆｜月底剩餘補助歸零</td>
+      </tr>
+    `;
+
+    const html = `
+      <table>
+        <tr><td class="title" colspan="17">員工餐月結表（補助月內累計，月底歸零）</td></tr>
+        ${summaryRows}
+        <tr><td colspan="17"></td></tr>
+        ${header}
+        ${rows}
+        ${totalRow}
+      </table>
+    `;
 
     const storeText = adminStoreFilter === "全部" ? "全部店別" : adminStoreFilter;
-    downloadCsv(`員工餐向員工收費月結-${selectedMonth}-${storeText}.csv`, header, rows);
+    downloadExcelHtml(`員工餐月結表-${selectedMonth}-${storeText}.xls`, html);
   };
 
   const submitMeal = async () => {
@@ -607,14 +911,14 @@ export default function App() {
       approvalStore,
       approvalStatus,
 
-      rule: "未滿4小時0元；滿4小時未滿6小時60元；滿6小時以上100元；超出補貼部分打9折；需審核員工須店長通過後才計入補助",
+      rule: "未滿4小時0元；滿4小時未滿6小時60元；滿6小時以上100元；補助可於當月內累計使用；月底剩餘補助歸零；餘額不足部分打9折；需審核員工須店長通過後才計入補助",
       createdAt: existingMealRecord?.createdAt || now,
       updatedAt: now,
     });
 
     setMessage(approvalRequired
       ? `已儲存：${matchedEmployee.name}｜此員工需 ${approvalStore} 店長審核，通過後才會給補貼 ${mealCalc.calculatedSubsidy} 元｜目前員工自付 ${mealCalc.employeePay} 元`
-      : `已儲存：${matchedEmployee.name}｜工時 ${formatHours(workInfo.workHours)} 小時｜補貼 ${mealCalc.subsidy} 元｜員工自付 ${mealCalc.employeePay} 元`
+      : `已儲存：${matchedEmployee.name}｜工時 ${formatHours(workInfo.workHours)} 小時｜本月可用補助 ${mealCalc.availableSubsidy} 元｜本次扣補助 ${mealCalc.subsidy} 元｜員工自付 ${mealCalc.employeePay} 元`
     );
     setMealAmount("");
   };
@@ -910,9 +1214,9 @@ export default function App() {
               </div>
 
               <div style={styles.personalSummaryGrid}>
-                <MetricSmall title="本月用餐天數" value={`${employeeMonthSummary.days} 天`} />
-                <MetricSmall title="本月已吃多少" value={`${employeeMonthSummary.totalMealAmount} 元`} />
-                <MetricSmall title="公司補貼" value={`${employeeMonthSummary.totalSubsidy} 元`} />
+                <MetricSmall title="本月上班天數" value={`${employeeMonthSummary.days} 天`} />
+                <MetricSmall title="本月累積補助" value={`${employeeMonthSummary.totalEarnedSubsidy} 元`} />
+                <MetricSmall title="剩餘補助" value={`${employeeMonthSummary.endingBalance} 元`} />
                 <MetricSmall title="本月應繳多少" value={`${employeeMonthSummary.isPaid ? 0 : employeeMonthSummary.totalEmployeePay} 元`} danger />
               </div>
 
@@ -925,7 +1229,7 @@ export default function App() {
                 <div style={styles.cardTitle}>今日實際用餐金額</div>
                 <div style={styles.cardSubTitle}>系統會自動讀取打卡紀錄與工時</div>
               </div>
-              <div style={styles.subsidyBadge}>補貼標準：{mealCalc.subsidy} 元</div>
+              <div style={styles.subsidyBadge}>可用補助餘額：{mealCalc.availableSubsidy} 元</div>
             </div>
 
             <div style={styles.entryRow}>
@@ -942,8 +1246,8 @@ export default function App() {
             </div>
 
             <div style={styles.formulaBox}>
-              <b>計算方式：</b>實際餐費 - 補貼金額 = 超出金額 → 超出金額 × 0.9 = 自付金額
-              <span>　範例：150 - 100 = 50 → 50 × 0.9 = 45元</span>
+              <b>新版計算方式：</b>每日補助先累積到本月餘額，用餐時優先扣補助餘額；餘額不足的部分 × 0.9 = 自付金額。
+              <span>　月底剩餘補助會歸零，不跨月累積。</span>
             </div>
 
             {!matchedEmployee && empId.trim() ? (
@@ -968,7 +1272,7 @@ export default function App() {
                 <div style={styles.cardSubTitle}>最多顯示最近 10 筆</div>
               </div>
               {isAdmin ? (
-                <button style={styles.outlineBtn} onClick={exportMonthlyCsv}>📊 匯出 CSV</button>
+                <button style={styles.outlineBtn} onClick={exportMonthlyCsv}>📊 匯出 Excel</button>
               ) : null}
             </div>
 
@@ -1066,7 +1370,7 @@ export default function App() {
             <div style={styles.noteIcon}>🪙</div>
             <div>
               <div style={styles.noteTitle}>月底結算說明</div>
-              <div style={styles.noteText}>每月 1 號～月底為一個結算週期，月底會另行通知金額，請準備現金繳交。</div>
+              <div style={styles.noteText}>每月 1 號～月底為一個結算週期，員工餐補助可於當月內累計使用；月底剩餘補助歸零，不跨月。</div>
             </div>
           </section>
 
@@ -1154,7 +1458,7 @@ export default function App() {
                 <div style={styles.dashboardGrid}>
                   <DashBox title="今日登記" value={`${adminDashboard.todayCount} 筆`} sub={`餐費 ${adminDashboard.todayMealAmount}｜補貼 ${adminDashboard.todaySubsidy}`} />
                   <DashBox title="今日員工自付" value={`${adminDashboard.todayEmployeePay} 元`} sub={adminDashboard.todayTop ? `吃最多：${adminDashboard.todayTop.name} ${adminDashboard.todayTop.mealAmount}元` : "尚無紀錄"} />
-                  <DashBox title="本月餐費" value={`${adminDashboard.monthMealAmount} 元`} sub={`共 ${adminDashboard.monthCount} 筆｜補貼 ${adminDashboard.monthSubsidy}`} />
+                  <DashBox title="本月累積補助" value={`${adminDashboard.monthEarnedSubsidy} 元`} sub={`上班 ${adminDashboard.monthWorkDays} 天｜已使用 ${adminDashboard.monthUsedSubsidy}`} />
                   <DashBox title="本月應收費" value={`${adminDashboard.monthEmployeePay} 元`} sub={adminDashboard.monthTop ? `應收最多：${adminDashboard.monthTop.name} ${adminDashboard.monthTop.employeePay}元` : "尚無紀錄"} highlight />
                 </div>
               </section>
@@ -1174,9 +1478,11 @@ export default function App() {
                     {storeSettlementSummary.map((store) => (
                       <div key={store.store} style={styles.storeSplitCard}>
                         <div style={styles.storeName}>{store.store}</div>
-                        <div style={styles.storeLine}>用餐筆數：{store.days}</div>
+                        <div style={styles.storeLine}>上班天數：{store.days}</div>
+                        <div style={styles.storeLine}>用餐筆數：{store.mealDays}</div>
                         <div style={styles.storeLine}>餐費總額：{store.totalMealAmount} 元</div>
-                        <div style={styles.storeLine}>公司補貼：{store.totalSubsidy} 元</div>
+                        <div style={styles.storeLine}>累積補助：{store.totalEarnedSubsidy} 元</div>
+                        <div style={styles.storeLine}>已使用補助：{store.totalUsedSubsidy} 元</div>
                         <div style={styles.storePay}>應向員工收：{store.totalEmployeePay} 元</div>
                       </div>
                     ))}
@@ -1201,12 +1507,14 @@ export default function App() {
                         <tr>
                           <th>員工</th>
                           <th>店別</th>
-                          <th>天數</th>
+                          <th>上班天數</th>
+                          <th>用餐筆數</th>
                           <th>吃的金額</th>
-                          <th>公司補貼</th>
-                          <th>超出金額</th>
+                          <th>累積補助</th>
+                          <th>已使用補助</th>
+                          <th>剩餘補助</th>
                           <th>員工自付</th>
-                          <th>審核</th>
+                          <th>待審核</th>
                           <th>收款狀態</th>
                         </tr>
                       </thead>
@@ -1216,11 +1524,13 @@ export default function App() {
                             <td>{item.name}<br /><span>{item.empId}</span></td>
                             <td>{item.store}</td>
                             <td>{item.days}</td>
+                            <td>{item.mealDays}</td>
                             <td>{item.totalMealAmount}</td>
-                            <td>{item.totalSubsidy}</td>
-                            <td>{item.totalOverAmount}</td>
+                            <td>{item.totalEarnedSubsidy}</td>
+                            <td>{item.totalUsedSubsidy}</td>
+                            <td>{item.endingBalance}</td>
                             <td style={styles.redText}><b>{item.paid ? 0 : item.totalEmployeePay}</b></td>
-                            <td>—</td>
+                            <td>{item.pendingCount || 0}</td>
                             <td>
                               <span style={item.paid ? styles.paidPill : styles.unpaidPill}>
                                 {item.paid ? "已收款" : "未收款"}
