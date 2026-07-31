@@ -3,6 +3,7 @@ import { ref, onValue, set, update, remove } from "firebase/database";
 import { signInAnonymously, onAuthStateChanged } from "firebase/auth";
 import { db, auth } from "./firebase";
 import { calculateMonthlySettlement } from "./settlement";
+import { exportMealWorkbook } from "./exportMealWorkbook";
 import "./App.css";
 
 const ADMIN_PASSWORD = "8888";
@@ -863,7 +864,26 @@ export default function App() {
     URL.revokeObjectURL(link.href);
   };
 
-  const exportMonthlyCsv = () => {
+  const exportMonthlyCsv = async () => {
+    if (!adminMonthRecords.length) {
+      alert(`${selectedMonth} 沒有資料可匯出`);
+      return;
+    }
+
+    try {
+      await exportMealWorkbook({
+        month: selectedMonth,
+        storeFilter: adminStoreFilter,
+        summaries: filteredMonthlySummaryWithPaid,
+        detailRows: adminMonthRecords,
+      });
+    } catch (error) {
+      console.error("Excel 匯出失敗", error);
+      alert("Excel 匯出失敗，請重新整理後再試一次");
+    }
+  };
+
+  const exportMonthlyCsvLegacy = () => {
     if (!adminMonthRecords.length) {
       alert(`${selectedMonth} 沒有資料可匯出`);
       return;
