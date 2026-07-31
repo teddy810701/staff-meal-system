@@ -1613,59 +1613,63 @@ export default function App() {
 
           {isAdmin ? (
             <>
-              <section className="meal-card" style={styles.recordsCard}>
-                <div className="card-title-row" style={styles.cardTitleRow}>
+              <details className="meal-card approval-settings" style={styles.recordsCard}>
+                <summary className="approval-settings__summary">
                   <div>
                     <div style={styles.cardTitle}>員工餐審核設定</div>
-                    <div style={styles.cardSubTitle}>漏 key 過的員工可改成需店長審核，之後補助須通過才會計入</div>
+                    <div style={styles.cardSubTitle}>較少使用，點此展開設定</div>
                   </div>
-                </div>
+                  <span className="approval-settings__toggle" aria-hidden="true">展開</span>
+                </summary>
 
-                {employees.length === 0 ? (
-                  <div style={styles.emptyText}>目前沒有員工資料</div>
-                ) : (
-                  <div className="responsive-table" style={styles.tableWrap}>
-                    <table className="meal-table" style={styles.cleanTable}>
-                      <thead>
-                        <tr>
-                          <th>員工</th>
-                          <th>店別</th>
-                          <th>需店長審核</th>
-                          <th>審核店別</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {employees.map((emp) => (
-                          <tr key={emp.id}>
-                            <td>{emp.name || "未填姓名"}<br /><span>{emp.empId || emp.id}</span></td>
-                            <td>{emp.store || "未填店名"}</td>
-                            <td>
-                              <select
-                                style={styles.inlineSelect}
-                                value={emp.mealApprovalRequired ? "是" : "否"}
-                                onChange={(e) => updateEmployeeApprovalSetting(emp, "mealApprovalRequired", e.target.value === "是")}
-                              >
-                                <option value="否">否</option>
-                                <option value="是">是</option>
-                              </select>
-                            </td>
-                            <td>
-                              <select
-                                style={styles.inlineSelect}
-                                value={normalizeStoreName(emp.approvalStore || emp.store || "西螺")}
-                                onChange={(e) => updateEmployeeApprovalSetting(emp, "approvalStore", e.target.value)}
-                              >
-                                <option value="西螺">西螺</option>
-                                <option value="斗南">斗南</option>
-                              </select>
-                            </td>
+                <div className="approval-settings__content">
+                  <div style={styles.cardSubTitle}>漏 key 過的員工可改成需店長審核，之後補助須通過才會計入</div>
+                  {employees.length === 0 ? (
+                    <div style={styles.emptyText}>目前沒有員工資料</div>
+                  ) : (
+                    <div className="responsive-table" style={styles.tableWrap}>
+                      <table className="meal-table" style={styles.cleanTable}>
+                        <thead>
+                          <tr>
+                            <th>員工</th>
+                            <th>店別</th>
+                            <th>需店長審核</th>
+                            <th>審核店別</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </section>
+                        </thead>
+                        <tbody>
+                          {employees.map((emp) => (
+                            <tr key={emp.id}>
+                              <td>{emp.name || "未填姓名"}<br /><span>{emp.empId || emp.id}</span></td>
+                              <td>{emp.store || "未填店名"}</td>
+                              <td>
+                                <select
+                                  style={styles.inlineSelect}
+                                  value={emp.mealApprovalRequired ? "是" : "否"}
+                                  onChange={(e) => updateEmployeeApprovalSetting(emp, "mealApprovalRequired", e.target.value === "是")}
+                                >
+                                  <option value="否">否</option>
+                                  <option value="是">是</option>
+                                </select>
+                              </td>
+                              <td>
+                                <select
+                                  style={styles.inlineSelect}
+                                  value={normalizeStoreName(emp.approvalStore || emp.store || "西螺")}
+                                  onChange={(e) => updateEmployeeApprovalSetting(emp, "approvalStore", e.target.value)}
+                                >
+                                  <option value="西螺">西螺</option>
+                                  <option value="斗南">斗南</option>
+                                </select>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </details>
 
               <section style={styles.adminCard}>
                 <div className="card-title-row" style={styles.cardTitleRow}>

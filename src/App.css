@@ -31,6 +31,15 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .store-meal-status-group + .store-meal-status-group { margin-top: 18px; }
 .store-meal-status-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border: 1px solid #bfdbfe; border-bottom: 0; border-radius: 14px 14px 0 0; background: #eff6ff; color: #1e3a8a; font-weight: 900; }
 .store-meal-status-heading span:last-child { color: #475569; font-size: 14px; }
+.approval-settings { padding: 0 !important; overflow: hidden; }
+.approval-settings__summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 24px; cursor: pointer; list-style: none; }
+.approval-settings__summary::-webkit-details-marker { display: none; }
+.approval-settings__toggle { flex: 0 0 auto; border: 1px solid #bfdbfe; border-radius: 999px; padding: 8px 14px; background: #eff6ff; color: #1d4ed8; font-weight: 900; }
+.approval-settings[open] .approval-settings__toggle::before { content: "收起"; }
+.approval-settings[open] .approval-settings__toggle { font-size: 0; }
+.approval-settings[open] .approval-settings__toggle::before { font-size: 14px; }
+.approval-settings__content { padding: 0 24px 24px; }
+.approval-settings__content > div:first-child { margin-bottom: 16px; }
 @media (hover: hover) { .meal-card:hover { box-shadow: 0 12px 30px rgba(15,23,42,.08); } }
 @media (max-width: 900px) {
   .meal-app-page { padding: 0 !important; background: #f4f7fb !important; }
@@ -55,6 +64,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
   .metric-grid > div > div:first-child { width: 42px !important; height: 42px !important; font-size: 20px !important; }
   .metric-grid > div > div:nth-child(3) { font-size: 28px !important; }
   .meal-card { border-radius: 16px !important; padding: 16px !important; margin-bottom: 14px !important; }
+  .approval-settings { padding: 0 !important; }
+  .approval-settings__summary { padding: 16px; }
+  .approval-settings__content { padding: 0 16px 16px; }
   .card-title-row { align-items: flex-start !important; flex-direction: column; gap: 10px !important; }
   .card-title-row > div:last-child { max-width: 100%; }
   .meal-entry-row { grid-template-columns: minmax(0,1fr) auto !important; gap: 10px !important; }
