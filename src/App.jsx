@@ -845,6 +845,100 @@ export default function App() {
     downloadExcelHtml(`員工餐月結表-${selectedMonth}-${storeText}.xls`, html);
   };
 
+  const exportEmployeeMonthlyDetail = (employeeSummary) => {
+    const employeeRows = adminMonthRecords
+      .filter((item) => normalizeEmpId(item.empId) === normalizeEmpId(employeeSummary.empId))
+      .sort((a, b) => String(a.dateKey || "").localeCompare(String(b.dateKey || "")));
+
+    if (!employeeRows.length) {
+      alert(`${employeeSummary.name} ${selectedMonth} 沒有明細可匯出`);
+      return;
+    }
+
+    let accumulatedMeal = 0;
+    let accumulatedSubsidy = 0;
+
+    const detailRows = employeeRows.map((item) => {
+      accumulatedMeal += Number(item.mealAmount) || 0;
+      accumulatedSubsidy += Number(item.earnedSubsidyAmount) || 0;
+      const settlement = calculateMonthlySettlement(accumulatedMeal, accumulatedSubsidy);
+      const approvalText = item.status === "待審核"
+        ? "待審核"
+        : item.status === "未通過"
+          ? "未通過"
+          : "已列入月結";
+
+      return `
+        <tr>
+          ${buildExcelCell(item.dateKey || "")}
+          ${buildExcelCell(formatTime(item.workInAt))}
+          ${buildExcelCell(formatTime(item.workOutAt))}
+          ${buildExcelNumberCell(item.workHours || 0, "hours")}
+          ${buildExcelNumberCell(item.breakHours || 0, "hours")}
+          ${buildExcelNumberCell(item.earnedSubsidyAmount || 0)}
+          ${buildExcelNumberCell(item.mealAmount || 0)}
+          ${buildExcelNumberCell(accumulatedSubsidy)}
+          ${buildExcelNumberCell(accumulatedMeal)}
+          ${buildExcelNumberCell(settlement.remainingSubsidy)}
+          ${buildExcelNumberCell(settlement.overAmount, settlement.overAmount > 0 ? "over" : "")}
+          ${buildExcelCell(approvalText)}
+          ${buildExcelCell(item.note || "")}
+        </tr>
+      `;
+    }).join("");
+
+    const paymentStatus = employeeSummary.paid ? "已收款" : "未收款";
+    const html = `
+      <table>
+        <tr><td class="title" colspan="13">${escapeHtml(employeeSummary.name)}｜${escapeHtml(selectedMonth)} 員工餐個人明細</td></tr>
+        <tr>
+          ${buildExcelCell("員工", "summaryLabel")}
+          ${buildExcelCell(employeeSummary.name, "summaryValue")}
+          ${buildExcelCell("工號", "summaryLabel")}
+          ${buildExcelCell(employeeSummary.empId, "summaryValue")}
+          ${buildExcelCell("店別", "summaryLabel")}
+          ${buildExcelCell(employeeSummary.store, "summaryValue")}
+          ${buildExcelCell("收款狀態", "summaryLabel")}
+          ${buildExcelCell(paymentStatus, "summaryValue")}
+          <td colspan="5"></td>
+        </tr>
+        <tr>
+          ${buildExcelCell("本月餐費", "summaryLabel")}
+          ${buildExcelNumberCell(employeeSummary.totalMealAmount, "summaryValue")}
+          ${buildExcelCell("本月補助", "summaryLabel")}
+          ${buildExcelNumberCell(employeeSummary.totalEarnedSubsidy, "summaryValue")}
+          ${buildExcelCell("剩餘補助", "summaryLabel")}
+          ${buildExcelNumberCell(employeeSummary.endingBalance, "summaryValue")}
+          ${buildExcelCell("整月超額", "summaryLabel")}
+          ${buildExcelNumberCell(employeeSummary.totalOverAmount, "summaryValue")}
+          ${buildExcelCell("應繳金額", "summaryLabel")}
+          ${buildExcelNumberCell(employeeSummary.paid ? 0 : employeeSummary.totalEmployeePay, employeeSummary.totalEmployeePay > 0 ? "over" : "summaryValue")}
+          <td colspan="3"></td>
+        </tr>
+        <tr><td colspan="13"></td></tr>
+        <tr>
+          <th>日期</th><th>上班</th><th>下班</th><th>工時</th><th>休息</th>
+          <th>當日新增補助</th><th>當日餐費</th><th>累積補助</th><th>累積餐費</th>
+          <th>當月剩餘補助</th><th>當月超額</th><th>狀態</th><th>備註</th>
+        </tr>
+        ${detailRows}
+        <tr class="subtotal">
+          <td colspan="5">月底統一結算</td>
+          ${buildExcelNumberCell(employeeSummary.totalEarnedSubsidy)}
+          ${buildExcelNumberCell(employeeSummary.totalMealAmount)}
+          ${buildExcelNumberCell(employeeSummary.totalEarnedSubsidy)}
+          ${buildExcelNumberCell(employeeSummary.totalMealAmount)}
+          ${buildExcelNumberCell(employeeSummary.endingBalance)}
+          ${buildExcelNumberCell(employeeSummary.totalOverAmount, employeeSummary.totalOverAmount > 0 ? "over" : "")}
+          ${buildExcelCell(`應繳 ${employeeSummary.paid ? 0 : employeeSummary.totalEmployeePay} 元`)}
+          ${buildExcelCell(paymentStatus)}
+        </tr>
+      </table>
+    `;
+
+    downloadExcelHtml(`員工餐個人明細-${selectedMonth}-${employeeSummary.name}-${employeeSummary.empId}.xls`, html);
+  };
+
   const submitMeal = async () => {
     setMessage("");
 
@@ -1515,6 +1609,7 @@ export default function App() {
                           <th>剩餘補助</th>
                           <th>員工自付</th>
                           <th>待審核</th>
+                          <th>個人明細</th>
                           <th>收款狀態</th>
                         </tr>
                       </thead>
@@ -1531,6 +1626,9 @@ export default function App() {
                             <td>{item.endingBalance}</td>
                             <td style={styles.redText}><b>{item.paid ? 0 : item.totalEmployeePay}</b></td>
                             <td>{item.pendingCount || 0}</td>
+                            <td>
+                              <button style={styles.tableEditBtn} onClick={() => exportEmployeeMonthlyDetail(item)}>匯出明細</button>
+                            </td>
                             <td>
                               <span style={item.paid ? styles.paidPill : styles.unpaidPill}>
                                 {item.paid ? "已收款" : "未收款"}
