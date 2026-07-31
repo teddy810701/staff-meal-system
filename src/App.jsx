@@ -42,6 +42,13 @@ const getMonthKeyFromDateKey = (dateKey = "") => String(dateKey || "").slice(0, 
 
 const normalizeEmpId = (value) => String(value || "").trim().toUpperCase();
 
+const formatStoreDisplayName = (value) => {
+  const name = String(value || "").trim();
+  if (name.includes("斗南")) return "斗南站前店";
+  if (name.includes("西螺")) return "西螺文昌店";
+  return name || "未填店名";
+};
+
 const formatTime = (timestamp) => {
   if (!timestamp) return "—";
   return new Date(timestamp).toLocaleTimeString("zh-TW", {
@@ -341,12 +348,73 @@ export default function App() {
     };
   }, [mealAmount, workInfo.subsidy, matchedEmployee, selectedEmpKey, mealDate, records, mealRecords]);
 
-  const todayMealList = useMemo(() => {
-    return Object.values(mealRecords || {})
-      .filter((item) => item && item.dateKey === mealDate)
-      .sort((a, b) => String(a.store || "").localeCompare(String(b.store || "")) || String(a.name || "").localeCompare(String(b.name || "")))
-      .slice(0, 10);
-  }, [mealRecords, mealDate]);
+  const todayMealStatusList = useMemo(() => {
+    const employeeById = {};
+    employees.forEach((employee) => {
+      const key = normalizeEmpId(employee.empId || employee.id);
+      if (key) employeeById[key] = employee;
+    });
+
+    const recordsByEmployee = {};
+    records.forEach((record) => {
+      const dateKey = record.dateKey || (record.createdAt ? formatTaipeiDateKey(record.createdAt) : "");
+      if (dateKey !== mealDate) return;
+      const key = normalizeEmpId(record.empId);
+      if (!key) return;
+      if (!recordsByEmployee[key]) recordsByEmployee[key] = [];
+      recordsByEmployee[key].push(record);
+    });
+
+    const mealsByEmployee = {};
+    Object.values(mealRecords || {}).forEach((meal) => {
+      if (!meal || meal.dateKey !== mealDate) return;
+      const key = normalizeEmpId(meal.empId);
+      if (key) mealsByEmployee[key] = meal;
+    });
+
+    return [...new Set([...Object.keys(recordsByEmployee), ...Object.keys(mealsByEmployee)])]
+      .map((key) => {
+        const employee = employeeById[key] || {};
+        const dayRecords = recordsByEmployee[key] || [];
+        const work = calculateEmployeeWork(dayRecords);
+        const meal = mealsByEmployee[key] || null;
+        const firstRecord = dayRecords[0] || {};
+        return {
+          key: `${mealDate}_${key}`,
+          empId: employee.empId || employee.id || meal?.empId || firstRecord.empId || key,
+          name: employee.name || meal?.name || firstRecord.name || key,
+          store: formatStoreDisplayName(employee.store || meal?.store || firstRecord.store),
+          hasWorkIn: work.hasWorkIn,
+          hasWorkOut: work.hasWorkOut,
+          workInAt: work.workInAt,
+          workOutAt: work.workOutAt,
+          workHours: work.canCalculate ? formatHours(work.workHours) : 0,
+          calculatedSubsidyAmount: work.canCalculate ? getMealSubsidy(work.workHours) : 0,
+          hasMeal: Boolean(meal),
+          mealAmount: Number(meal?.mealAmount) || 0,
+          approvalRequired: Boolean(meal?.approvalRequired),
+          approvalStatus: meal?.approvalStatus || (meal?.approvalRequired ? "pending" : "approved"),
+          meal,
+        };
+      })
+      .filter((item) => item.hasWorkIn || item.hasMeal)
+      .sort((a, b) => a.store.localeCompare(b.store, "zh-Hant") || a.name.localeCompare(b.name, "zh-Hant"));
+  }, [employees, records, mealRecords, mealDate]);
+
+  const todayMealStatusGroups = useMemo(() => {
+    const storeOrder = ["斗南站前店", "西螺文昌店"];
+    const groups = {};
+    todayMealStatusList.forEach((item) => {
+      if (!groups[item.store]) groups[item.store] = [];
+      groups[item.store].push(item);
+    });
+    return Object.entries(groups).sort(([storeA], [storeB]) => {
+      const indexA = storeOrder.indexOf(storeA);
+      const indexB = storeOrder.indexOf(storeB);
+      if (indexA >= 0 || indexB >= 0) return (indexA < 0 ? 99 : indexA) - (indexB < 0 ? 99 : indexB);
+      return storeA.localeCompare(storeB, "zh-Hant");
+    });
+  }, [todayMealStatusList]);
 
   const storeOptions = useMemo(() => {
     const stores = employees
@@ -503,48 +571,11 @@ export default function App() {
   }, [mealRecords, mealDate, adminStoreFilter]);
 
   const workingWithoutMeal = useMemo(() => {
-    const employeeById = {};
-    employees.forEach((employee) => {
-      const key = normalizeEmpId(employee.empId || employee.id);
-      if (key) employeeById[key] = employee;
-    });
-
-    const dayRecordsByEmployee = {};
-    records.forEach((record) => {
-      const dateKey = record.dateKey || (record.createdAt ? formatTaipeiDateKey(record.createdAt) : "");
-      if (dateKey !== mealDate) return;
-      const key = normalizeEmpId(record.empId);
-      if (!key) return;
-      if (!dayRecordsByEmployee[key]) dayRecordsByEmployee[key] = [];
-      dayRecordsByEmployee[key].push(record);
-    });
-
-    const employeesWithMeal = new Set(
-      Object.values(mealRecords || {})
-        .filter((meal) => meal && meal.dateKey === mealDate)
-        .map((meal) => normalizeEmpId(meal.empId))
-        .filter(Boolean),
-    );
-
-    return Object.entries(dayRecordsByEmployee)
-      .filter(([, dayRecords]) => dayRecords.some((record) => record.type === "上班"))
-      .filter(([key]) => !employeesWithMeal.has(key))
-      .map(([key, dayRecords]) => {
-        const employee = employeeById[key] || {};
-        const work = calculateEmployeeWork(dayRecords);
-        const firstRecord = dayRecords[0] || {};
-        return {
-          empId: employee.empId || employee.id || firstRecord.empId || key,
-          name: employee.name || firstRecord.name || key,
-          store: employee.store || firstRecord.store || "未填店名",
-          workInAt: work.workInAt,
-          workOutAt: work.workOutAt,
-          hasWorkOut: work.hasWorkOut,
-        };
-      })
+    return todayMealStatusList
+      .filter((item) => item.hasWorkIn && !item.hasMeal)
       .filter((item) => adminStoreFilter === "全部" || String(item.store || "").includes(adminStoreFilter))
       .sort((a, b) => String(a.store).localeCompare(String(b.store), "zh-Hant") || String(a.name).localeCompare(String(b.name), "zh-Hant"));
-  }, [employees, records, mealRecords, mealDate, adminStoreFilter]);
+  }, [todayMealStatusList, adminStoreFilter]);
 
   const adminDashboard = useMemo(() => {
     const sum = (list, key) => list.reduce((total, item) => total + (Number(item[key]) || 0), 0);
@@ -1450,52 +1481,76 @@ export default function App() {
           <section className="meal-card" style={styles.recordsCard}>
             <div className="card-title-row" style={styles.cardTitleRow}>
               <div>
-                <div style={styles.cardTitle}>本月餐費紀錄</div>
-                <div style={styles.cardSubTitle}>最多顯示最近 10 筆</div>
+                <div style={styles.cardTitle}>本日員工餐輸入狀況</div>
+                <div style={styles.cardSubTitle}>{mealDate}｜依店別顯示所有上班與已輸入人員</div>
               </div>
               {isAdmin ? (
                 <button style={styles.outlineBtn} onClick={exportMonthlyCsv}>📊 匯出 Excel</button>
               ) : null}
             </div>
 
-            {todayMealList.length === 0 ? (
-              <div style={styles.emptyText}>目前尚無員工餐紀錄</div>
+            {todayMealStatusGroups.length === 0 ? (
+              <div style={styles.emptyText}>本日尚無上班或員工餐資料</div>
             ) : (
-              <div className="responsive-table" style={styles.tableWrap}>
-                <table className="meal-table" style={styles.cleanTable}>
-                  <thead>
-                    <tr>
-                      <th>日期</th>
-                      <th>員工</th>
-                      <th>工時</th>
-                      <th>當日新增補助</th>
-                      <th>餐費</th>
-                      <th>應繳</th>
-                      <th>狀態</th>
-                      {isAdmin ? <th>操作</th> : null}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {todayMealList.map((item) => (
-                      <tr key={`${item.dateKey}_${item.empId}`}>
-                        <td>{item.dateKey}</td>
-                        <td>{item.name}<br /><span>{item.store || "未填店名"}</span></td>
-                        <td style={styles.blueText}>{item.workHours || 0} hr</td>
-                        <td style={styles.greenText}>{item.calculatedSubsidyAmount ?? item.subsidyAmount ?? 0} 元</td>
-                        <td style={styles.orangeText}>{item.mealAmount || 0} 元</td>
-                        <td>月底統計</td>
-                        <td><span style={(item.approvalStatus || "approved") === "pending" ? styles.pendingPill : (item.approvalStatus || "approved") === "rejected" ? styles.rejectedPill : styles.savedPill}>{item.approvalRequired ? (APPROVAL_STATUS_TEXT[item.approvalStatus || "pending"] || "待店長審核") : "已儲存"}</span></td>
-                        {isAdmin ? (
-                          <td>
-                            <button style={styles.tableEditBtn} onClick={() => openEditMeal(item)}>修改</button>
-                            <button style={styles.tableDeleteBtn} onClick={() => deleteMealRecord(item)}>刪除</button>
-                          </td>
-                        ) : null}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              todayMealStatusGroups.map(([storeName, items]) => (
+                <div className="store-meal-status-group" key={storeName}>
+                  <div className="store-meal-status-heading">
+                    <span>{storeName}</span>
+                    <span>{items.filter((item) => item.hasMeal).length}/{items.length} 人已輸入</span>
+                  </div>
+                  <div className="responsive-table" style={styles.tableWrap}>
+                    <table className="meal-table" style={styles.cleanTable}>
+                      <thead>
+                        <tr>
+                          <th>日期</th>
+                          <th>員工</th>
+                          <th>工時</th>
+                          <th>當日新增補助</th>
+                          <th>餐費</th>
+                          <th>本日是否輸入員工餐</th>
+                          {isAdmin ? <th>操作</th> : null}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {items.map((item) => {
+                          const statusText = !item.hasMeal
+                            ? "未輸入"
+                            : item.approvalStatus === "pending"
+                              ? "已輸入・待審核"
+                              : item.approvalStatus === "rejected"
+                                ? "已輸入・未通過"
+                                : "已輸入";
+                          const statusStyle = !item.hasMeal || item.approvalStatus === "rejected"
+                            ? styles.rejectedPill
+                            : item.approvalStatus === "pending"
+                              ? styles.pendingPill
+                              : styles.savedPill;
+                          return (
+                            <tr key={item.key}>
+                              <td>{mealDate}</td>
+                              <td>{item.name}<br /><span>{item.empId}</span></td>
+                              <td style={styles.blueText}>{item.hasWorkOut ? `${item.workHours} hr` : "—"}</td>
+                              <td style={styles.greenText}>{item.calculatedSubsidyAmount} 元</td>
+                              <td style={styles.orangeText}>{item.hasMeal ? `${item.mealAmount} 元` : "—"}</td>
+                              <td><span style={statusStyle}>{statusText}</span></td>
+                              {isAdmin ? (
+                                <td>
+                                  {item.hasMeal ? (
+                                    <>
+                                      <button style={styles.tableEditBtn} onClick={() => openEditMeal(item.meal)}>修改</button>
+                                      <button style={styles.tableDeleteBtn} onClick={() => deleteMealRecord(item.meal)}>刪除</button>
+                                    </>
+                                  ) : "—"}
+                                </td>
+                              ) : null}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))
             )}
           </section>
 

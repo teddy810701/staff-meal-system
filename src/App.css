@@ -28,6 +28,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .meal-card { transition: box-shadow 160ms ease, transform 160ms ease; }
 .responsive-table { overscroll-behavior-inline: contain; scrollbar-width: thin; }
 .meal-table { min-width: 720px; }
+.store-meal-status-group + .store-meal-status-group { margin-top: 18px; }
+.store-meal-status-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border: 1px solid #bfdbfe; border-bottom: 0; border-radius: 14px 14px 0 0; background: #eff6ff; color: #1e3a8a; font-weight: 900; }
+.store-meal-status-heading span:last-child { color: #475569; font-size: 14px; }
 @media (hover: hover) { .meal-card:hover { box-shadow: 0 12px 30px rgba(15,23,42,.08); } }
 @media (max-width: 900px) {
   .meal-app-page { padding: 0 !important; background: #f4f7fb !important; }
@@ -58,6 +61,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
   .meal-entry-row > div { display: block !important; }
   .meal-save-button { grid-column: 1 / -1; width: 100%; }
   .responsive-table { margin-inline: -16px; border-radius: 0 !important; border-inline: 0 !important; }
+  .store-meal-status-heading { margin-inline: -16px; border-inline: 0; border-radius: 0; }
   .admin-controls { width: 100%; display: grid !important; grid-template-columns: 1fr 1fr; }
   .admin-controls > * { width: 100% !important; min-width: 0; }
   .sync-banner { align-items: stretch; flex-direction: column; gap: 8px; }
