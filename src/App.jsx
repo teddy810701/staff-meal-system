@@ -502,6 +502,50 @@ export default function App() {
       .filter((item) => adminStoreFilter === "全部" || (item.store || "未填店名") === adminStoreFilter);
   }, [mealRecords, mealDate, adminStoreFilter]);
 
+  const workingWithoutMeal = useMemo(() => {
+    const employeeById = {};
+    employees.forEach((employee) => {
+      const key = normalizeEmpId(employee.empId || employee.id);
+      if (key) employeeById[key] = employee;
+    });
+
+    const dayRecordsByEmployee = {};
+    records.forEach((record) => {
+      const dateKey = record.dateKey || (record.createdAt ? formatTaipeiDateKey(record.createdAt) : "");
+      if (dateKey !== mealDate) return;
+      const key = normalizeEmpId(record.empId);
+      if (!key) return;
+      if (!dayRecordsByEmployee[key]) dayRecordsByEmployee[key] = [];
+      dayRecordsByEmployee[key].push(record);
+    });
+
+    const employeesWithMeal = new Set(
+      Object.values(mealRecords || {})
+        .filter((meal) => meal && meal.dateKey === mealDate)
+        .map((meal) => normalizeEmpId(meal.empId))
+        .filter(Boolean),
+    );
+
+    return Object.entries(dayRecordsByEmployee)
+      .filter(([, dayRecords]) => dayRecords.some((record) => record.type === "上班"))
+      .filter(([key]) => !employeesWithMeal.has(key))
+      .map(([key, dayRecords]) => {
+        const employee = employeeById[key] || {};
+        const work = calculateEmployeeWork(dayRecords);
+        const firstRecord = dayRecords[0] || {};
+        return {
+          empId: employee.empId || employee.id || firstRecord.empId || key,
+          name: employee.name || firstRecord.name || key,
+          store: employee.store || firstRecord.store || "未填店名",
+          workInAt: work.workInAt,
+          workOutAt: work.workOutAt,
+          hasWorkOut: work.hasWorkOut,
+        };
+      })
+      .filter((item) => adminStoreFilter === "全部" || String(item.store || "").includes(adminStoreFilter))
+      .sort((a, b) => String(a.store).localeCompare(String(b.store), "zh-Hant") || String(a.name).localeCompare(String(b.name), "zh-Hant"));
+  }, [employees, records, mealRecords, mealDate, adminStoreFilter]);
+
   const adminDashboard = useMemo(() => {
     const sum = (list, key) => list.reduce((total, item) => total + (Number(item[key]) || 0), 0);
     const todayTop = [...adminTodayRecords].sort((a, b) => (Number(b.mealAmount) || 0) - (Number(a.mealAmount) || 0))[0];
@@ -1595,10 +1639,52 @@ export default function App() {
 
                 <div className="dashboard-grid" style={styles.dashboardGrid}>
                   <DashBox title="今日登記" value={`${adminDashboard.todayCount} 筆`} sub={`餐費 ${adminDashboard.todayMealAmount} 元`} />
+                  <DashBox title="今日未登記" value={`${workingWithoutMeal.length} 人`} sub="有上班、尚未登記員工餐" highlight={workingWithoutMeal.length > 0} />
                   <DashBox title="今日用餐最高" value={adminDashboard.todayTop ? `${adminDashboard.todayTop.mealAmount} 元` : "0 元"} sub={adminDashboard.todayTop ? `${adminDashboard.todayTop.name}` : "尚無紀錄"} />
                   <DashBox title="本月累積補助" value={`${adminDashboard.monthEarnedSubsidy} 元`} sub={`上班 ${adminDashboard.monthWorkDays} 天｜已使用 ${adminDashboard.monthUsedSubsidy}`} />
                   <DashBox title="本月應收費" value={`${adminDashboard.monthEmployeePay} 元`} sub={adminDashboard.monthTop ? `應收最多：${adminDashboard.monthTop.name} ${adminDashboard.monthTop.employeePay}元` : "尚無紀錄"} highlight />
                 </div>
+              </section>
+
+              <section className="meal-card" style={styles.recordsCard}>
+                <div className="card-title-row" style={styles.cardTitleRow}>
+                  <div>
+                    <div style={styles.cardTitle}>有上班但尚未登記員工餐</div>
+                    <div style={styles.cardSubTitle}>{mealDate}｜{adminStoreFilter}｜依原始上班打卡即時比對</div>
+                  </div>
+                  <div style={workingWithoutMeal.length > 0 ? styles.unpaidBadge : styles.paidBadge}>
+                    {workingWithoutMeal.length > 0 ? `${workingWithoutMeal.length} 人待確認` : "皆已確認"}
+                  </div>
+                </div>
+
+                {workingWithoutMeal.length === 0 ? (
+                  <div style={styles.emptyText}>目前沒有「有上班但未登記員工餐」的人員。</div>
+                ) : (
+                  <div className="responsive-table" style={styles.tableWrap}>
+                    <table className="meal-table" style={styles.cleanTable}>
+                      <thead>
+                        <tr>
+                          <th>員工</th>
+                          <th>店別</th>
+                          <th>上班時間</th>
+                          <th>下班時間</th>
+                          <th>目前狀態</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {workingWithoutMeal.map((item) => (
+                          <tr key={`${mealDate}_${item.empId}`}>
+                            <td>{item.name}<br /><span>{item.empId}</span></td>
+                            <td>{item.store}</td>
+                            <td style={styles.blueText}>{formatTime(item.workInAt)}</td>
+                            <td>{item.hasWorkOut ? formatTime(item.workOutAt) : "—"}</td>
+                            <td><span style={item.hasWorkOut ? styles.pendingPill : styles.savedPill}>{item.hasWorkOut ? "已下班，待確認餐費" : "仍在上班"}</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </section>
 
               <section className="meal-card" style={styles.recordsCard}>
