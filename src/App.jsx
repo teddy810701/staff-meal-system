@@ -718,7 +718,7 @@ export default function App() {
     return filteredMonthlySummary.map((item) => {
       const key = `${selectedMonth}_${item.empId}`;
       const payment = paymentRecords[key] || {};
-      return { ...item, paid: Boolean(payment.paid), paidAmount: payment.amount || 0 };
+      return { ...item, paid: Boolean(payment.paid), paidAmount: payment.amount || 0, paidAt: payment.paidAt || 0 };
     });
   }, [filteredMonthlySummary, paymentRecords, selectedMonth]);
 
@@ -836,6 +836,11 @@ export default function App() {
             .pending { background: #fff7ed; color: #92400e; font-weight: bold; }
             .rejected { background: #fee2e2; color: #b91c1c; font-weight: bold; }
             .subtotal { background: #fff2cc; font-weight: bold; }
+            .sectionTitle { font-size: 15pt; font-weight: bold; background: #dbeafe; color: #1e3a8a; text-align: left; }
+            .receipt { margin-top: 14px; border: 2px solid #334155; }
+            .receipt td { height: 30px; text-align: left; }
+            .signature { height: 54px !important; vertical-align: bottom; }
+            .employeeSection { page-break-before: always; margin-top: 28px; }
           </style>
         </head>
         <body>${html}</body>
@@ -867,17 +872,25 @@ export default function App() {
       return acc;
     }, { workDays: 0, mealDays: 0, mealAmount: 0, earnedSubsidy: 0, usedSubsidy: 0, balance: 0, employeePay: 0, pendingCount: 0 });
 
-    filteredMonthlySummary.forEach((item) => {
+    filteredMonthlySummaryWithPaid.forEach((item) => {
       totals.usedSubsidy += Number(item.totalUsedSubsidy) || 0;
       totals.balance += Number(item.endingBalance) || 0;
       totals.employeePay += Number(item.totalEmployeePay) || 0;
     });
 
+    const collectedAmount = filteredMonthlySummaryWithPaid
+      .filter((item) => item.paid)
+      .reduce((sum, item) => sum + (Number(item.totalEmployeePay) || 0), 0);
+    const outstandingAmount = filteredMonthlySummaryWithPaid
+      .filter((item) => !item.paid)
+      .reduce((sum, item) => sum + (Number(item.totalEmployeePay) || 0), 0);
+
     const summaryRows = [
       ["月份", selectedMonth, "店別", adminStoreFilter],
       ["上班天數", totals.workDays, "用餐筆數", totals.mealDays],
       ["本月累積補助", totals.earnedSubsidy, "已使用補助", totals.usedSubsidy],
-      ["月底剩餘補助", Math.max(0, totals.balance), "員工自付總額", totals.employeePay],
+      ["月底剩餘補助", Math.max(0, totals.balance), "本月應收總額", totals.employeePay],
+      ["已收款", collectedAmount, "尚待收款", outstandingAmount],
       ["待審核筆數", totals.pendingCount, "產生時間", new Date().toLocaleString("zh-TW", { hour12: false })],
     ].map((row) => `
       <tr>
@@ -936,19 +949,114 @@ export default function App() {
       </tr>
     `;
 
+    const collectionHeader = `
+      <tr>
+        <th>店別</th><th>員工</th><th>工號</th><th>上班天數</th><th>用餐筆數</th>
+        <th>餐費總額</th><th>累積補助</th><th>剩餘補助</th><th>整月超額</th>
+        <th>九折後應繳</th><th>收款狀態</th><th>收款日期</th><th>員工簽名</th>
+      </tr>
+    `;
+
+    const collectionRows = filteredMonthlySummaryWithPaid.map((item) => `
+      <tr>
+        ${buildExcelCell(item.store)}
+        ${buildExcelCell(item.name)}
+        ${buildExcelCell(item.empId)}
+        ${buildExcelNumberCell(item.days)}
+        ${buildExcelNumberCell(item.mealDays)}
+        ${buildExcelNumberCell(item.totalMealAmount)}
+        ${buildExcelNumberCell(item.totalEarnedSubsidy)}
+        ${buildExcelNumberCell(item.endingBalance)}
+        ${buildExcelNumberCell(item.totalOverAmount, item.totalOverAmount > 0 ? "over" : "")}
+        ${buildExcelNumberCell(item.totalEmployeePay, item.totalEmployeePay > 0 ? "over" : "")}
+        ${buildExcelCell(item.paid ? "已收款" : "未收款", item.paid ? "ok" : "pending")}
+        ${buildExcelCell(item.paidAt ? new Date(item.paidAt).toLocaleDateString("zh-TW") : "")}
+        ${buildExcelCell("")}
+      </tr>
+    `).join("");
+
+    const employeeSections = filteredMonthlySummaryWithPaid.map((employeeSummary) => {
+      const employeeRows = adminMonthRecords
+        .filter((item) => normalizeEmpId(item.empId) === normalizeEmpId(employeeSummary.empId))
+        .sort((a, b) => String(a.dateKey || "").localeCompare(String(b.dateKey || "")));
+      let accumulatedMeal = 0;
+      let accumulatedSubsidy = 0;
+      const detailRows = employeeRows.map((item) => {
+        accumulatedMeal += Number(item.mealAmount) || 0;
+        accumulatedSubsidy += Number(item.earnedSubsidyAmount) || 0;
+        const settlement = calculateMonthlySettlement(accumulatedMeal, accumulatedSubsidy);
+        const approvalText = item.status === "待審核" ? "待審核" : item.status === "未通過" ? "未通過" : "已列入月結";
+        return `<tr>
+          ${buildExcelCell(item.dateKey || "")}
+          ${buildExcelNumberCell(item.workHours || 0, "hours")}
+          ${buildExcelNumberCell(item.earnedSubsidyAmount || 0)}
+          ${buildExcelNumberCell(item.mealAmount || 0)}
+          ${buildExcelNumberCell(accumulatedSubsidy)}
+          ${buildExcelNumberCell(accumulatedMeal)}
+          ${buildExcelNumberCell(settlement.remainingSubsidy)}
+          ${buildExcelNumberCell(settlement.overAmount, settlement.overAmount > 0 ? "over" : "")}
+          ${buildExcelCell(approvalText)}
+          ${buildExcelCell(item.note || "")}
+        </tr>`;
+      }).join("");
+      const paymentStatus = employeeSummary.paid ? "已收款" : "未收款";
+      return `
+        <div class="employeeSection">
+          <table>
+            <tr><td class="sectionTitle" colspan="10">${escapeHtml(employeeSummary.name)}｜${escapeHtml(selectedMonth)} 收款核對明細</td></tr>
+            <tr>
+              ${buildExcelCell("工號", "summaryLabel")}${buildExcelCell(employeeSummary.empId, "summaryValue")}
+              ${buildExcelCell("店別", "summaryLabel")}${buildExcelCell(employeeSummary.store, "summaryValue")}
+              ${buildExcelCell("餐費總額", "summaryLabel")}${buildExcelNumberCell(employeeSummary.totalMealAmount, "summaryValue")}
+              ${buildExcelCell("累積補助", "summaryLabel")}${buildExcelNumberCell(employeeSummary.totalEarnedSubsidy, "summaryValue")}
+              ${buildExcelCell("收款狀態", "summaryLabel")}${buildExcelCell(paymentStatus, "summaryValue")}
+            </tr>
+            <tr>
+              <th>日期</th><th>工時</th><th>當日新增補助</th><th>當日餐費</th><th>累積補助</th>
+              <th>累積餐費</th><th>剩餘補助</th><th>整月超額</th><th>審核狀態</th><th>備註</th>
+            </tr>
+            ${detailRows}
+            <tr class="subtotal">
+              <td colspan="2">月底統一結算</td>
+              ${buildExcelNumberCell(employeeSummary.totalEarnedSubsidy)}
+              ${buildExcelNumberCell(employeeSummary.totalMealAmount)}
+              <td colspan="2">超額部分 × 0.9</td>
+              ${buildExcelNumberCell(employeeSummary.endingBalance)}
+              ${buildExcelNumberCell(employeeSummary.totalOverAmount, employeeSummary.totalOverAmount > 0 ? "over" : "")}
+              ${buildExcelCell(`應繳 ${employeeSummary.totalEmployeePay} 元`, employeeSummary.totalEmployeePay > 0 ? "over" : "")}
+              ${buildExcelCell(paymentStatus)}
+            </tr>
+          </table>
+          <table class="receipt">
+            <tr><td class="sectionTitle" colspan="6">員工餐收款收據</td></tr>
+            <tr><td>月份</td><td>${escapeHtml(selectedMonth)}</td><td>員工</td><td>${escapeHtml(employeeSummary.name)}</td><td>工號</td><td>${escapeHtml(employeeSummary.empId)}</td></tr>
+            <tr><td>餐費總額</td><td>${employeeSummary.totalMealAmount} 元</td><td>補助總額</td><td>${employeeSummary.totalEarnedSubsidy} 元</td><td>九折後應繳</td><td class="over">${employeeSummary.totalEmployeePay} 元</td></tr>
+            <tr><td>收款日期</td><td colspan="2">　　　年　　　月　　　日</td><td>收款人簽名</td><td class="signature" colspan="2"></td></tr>
+            <tr><td>員工確認簽名</td><td class="signature" colspan="5"></td></tr>
+          </table>
+        </div>
+      `;
+    }).join("");
+
     const html = `
       <table>
-        <tr><td class="title" colspan="17">員工餐月結表（補助月內累計，月底歸零）</td></tr>
+        <tr><td class="title" colspan="17">${escapeHtml(selectedMonth)} 員工餐收款核對簿（補助月內累計，月底歸零）</td></tr>
         ${summaryRows}
         <tr><td colspan="17"></td></tr>
+        <tr><td class="sectionTitle" colspan="17">員工收款總表</td></tr>
+        ${collectionHeader}
+        ${collectionRows}
+        <tr><td colspan="17"></td></tr>
+        <tr><td class="sectionTitle" colspan="17">全月逐日原始明細</td></tr>
         ${header}
         ${rows}
         ${totalRow}
       </table>
+      ${employeeSections}
     `;
 
     const storeText = adminStoreFilter === "全部" ? "全部店別" : adminStoreFilter;
-    downloadExcelHtml(`員工餐月結表-${selectedMonth}-${storeText}.xls`, html);
+    downloadExcelHtml(`員工餐收款核對簿-${selectedMonth}-${storeText}.xls`, html);
   };
 
   const exportEmployeeMonthlyDetail = (employeeSummary) => {
@@ -1393,6 +1501,9 @@ export default function App() {
                     value={selectedMonth}
                     onChange={(e) => setSelectedMonth(e.target.value)}
                   />
+                  <button className="admin-export-button" style={styles.outlineBtn} onClick={exportMonthlyCsv}>
+                    匯出 {selectedMonth} 收款核對簿
+                  </button>
                 </div>
               </div>
 
@@ -1524,9 +1635,6 @@ export default function App() {
                 <div style={styles.cardTitle}>本日員工餐輸入狀況</div>
                 <div style={styles.cardSubTitle}>{mealDate}｜依店別顯示所有上班與已輸入人員</div>
               </div>
-              {isAdmin ? (
-                <button style={styles.outlineBtn} onClick={exportMonthlyCsv}>📊 匯出 Excel</button>
-              ) : null}
             </div>
 
             {todayMealStatusGroups.length === 0 ? (
