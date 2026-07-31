@@ -837,9 +837,15 @@ export default function App() {
             .rejected { background: #fee2e2; color: #b91c1c; font-weight: bold; }
             .subtotal { background: #fff2cc; font-weight: bold; }
             .sectionTitle { font-size: 15pt; font-weight: bold; background: #dbeafe; color: #1e3a8a; text-align: left; }
-            .receipt { margin-top: 14px; border: 2px solid #334155; }
-            .receipt td { height: 30px; text-align: left; }
-            .signature { height: 54px !important; vertical-align: bottom; }
+            .receiptGrid { margin-top: 28px; page-break-before: always; }
+            .receiptGrid > tbody > tr > td { border: 0; padding: 8px; vertical-align: top; }
+            .receiptCard { width: 100%; border: 1px solid #94a3b8; }
+            .receiptCard td { height: 26px; padding: 4px 6px; text-align: left; }
+            .receiptTitle { background: #173653; color: #fff; font-size: 14pt; font-weight: bold; text-align: center !important; }
+            .receiptLabel { width: 18%; background: #dbe8f5; color: #334155; }
+            .receiptValue { width: 32%; text-align: right !important; }
+            .receiptSign { background: #fff2cc; text-align: left !important; }
+            .receiptNote { height: 38px !important; color: #64748b; font-size: 9pt; white-space: normal; }
             .employeeSection { page-break-before: always; margin-top: 28px; }
           </style>
         </head>
@@ -1027,16 +1033,67 @@ export default function App() {
               ${buildExcelCell(paymentStatus)}
             </tr>
           </table>
-          <table class="receipt">
-            <tr><td class="sectionTitle" colspan="6">員工餐收款收據</td></tr>
-            <tr><td>月份</td><td>${escapeHtml(selectedMonth)}</td><td>員工</td><td>${escapeHtml(employeeSummary.name)}</td><td>工號</td><td>${escapeHtml(employeeSummary.empId)}</td></tr>
-            <tr><td>餐費總額</td><td>${employeeSummary.totalMealAmount} 元</td><td>補助總額</td><td>${employeeSummary.totalEarnedSubsidy} 元</td><td>九折後應繳</td><td class="over">${employeeSummary.totalEmployeePay} 元</td></tr>
-            <tr><td>收款日期</td><td colspan="2">　　　年　　　月　　　日</td><td>收款人簽名</td><td class="signature" colspan="2"></td></tr>
-            <tr><td>員工確認簽名</td><td class="signature" colspan="5"></td></tr>
-          </table>
         </div>
       `;
     }).join("");
+
+    const receiptCard = (employeeSummary) => {
+      const paymentStatus = employeeSummary.paid ? "已收款" : "未收款";
+      const paidTime = employeeSummary.paidAt
+        ? new Date(employeeSummary.paidAt).toLocaleString("zh-TW", { hour12: false })
+        : "";
+      return `
+        <table class="receiptCard">
+          <tr><td class="receiptTitle" colspan="4">員工餐月結收款單</td></tr>
+          <tr>
+            <td class="receiptLabel">月份</td><td>${escapeHtml(selectedMonth)}</td>
+            <td class="receiptLabel">店別</td><td>${escapeHtml(employeeSummary.store)}</td>
+          </tr>
+          <tr>
+            <td class="receiptLabel">員工</td><td>${escapeHtml(employeeSummary.name)}</td>
+            <td class="receiptLabel">工號</td><td>${escapeHtml(employeeSummary.empId)}</td>
+          </tr>
+          <tr>
+            <td class="receiptLabel">餐費總額</td><td class="receiptValue">${Number(employeeSummary.totalMealAmount) || 0} 元</td>
+            <td class="receiptLabel">累積補助</td><td class="receiptValue">${Number(employeeSummary.totalEarnedSubsidy) || 0} 元</td>
+          </tr>
+          <tr>
+            <td class="receiptLabel">使用補助</td><td class="receiptValue">${Number(employeeSummary.totalUsedSubsidy) || 0} 元</td>
+            <td class="receiptLabel">剩餘補助</td><td class="receiptValue">${Number(employeeSummary.endingBalance) || 0} 元</td>
+          </tr>
+          <tr>
+            <td class="receiptLabel">整月超額</td><td class="receiptValue">${Number(employeeSummary.totalOverAmount) || 0} 元</td>
+            <td class="receiptLabel">九折應繳</td><td class="receiptValue over">${Number(employeeSummary.totalEmployeePay) || 0} 元</td>
+          </tr>
+          <tr>
+            <td class="receiptLabel">收款狀態</td><td>${paymentStatus}</td>
+            <td class="receiptLabel">收款時間</td><td>${escapeHtml(paidTime)}</td>
+          </tr>
+          <tr><td class="receiptSign" colspan="4">員工簽收：____________________　日期：____________</td></tr>
+          <tr><td class="receiptNote" colspan="4">說明：補助於當月內累計使用；整月餐費超過累積補助的差額打九折後收款，月底剩餘補助歸零。</td></tr>
+        </table>
+      `;
+    };
+
+    const receiptRows = [];
+    for (let index = 0; index < filteredMonthlySummaryWithPaid.length; index += 2) {
+      const left = filteredMonthlySummaryWithPaid[index];
+      const right = filteredMonthlySummaryWithPaid[index + 1];
+      receiptRows.push(`
+        <tr>
+          <td>${receiptCard(left)}</td>
+          <td style="width:18px"></td>
+          <td>${right ? receiptCard(right) : ""}</td>
+        </tr>
+      `);
+    }
+
+    const receiptsHtml = `
+      <table class="receiptGrid">
+        <tr><td class="sectionTitle" colspan="3">${escapeHtml(selectedMonth)} 個人收款單（兩張並排列印）</td></tr>
+        ${receiptRows.join("")}
+      </table>
+    `;
 
     const html = `
       <table>
@@ -1053,6 +1110,7 @@ export default function App() {
         ${totalRow}
       </table>
       ${employeeSections}
+      ${receiptsHtml}
     `;
 
     const storeText = adminStoreFilter === "全部" ? "全部店別" : adminStoreFilter;
