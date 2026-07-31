@@ -3,6 +3,7 @@ import { ref, onValue, set, update, remove } from "firebase/database";
 import { signInAnonymously, onAuthStateChanged } from "firebase/auth";
 import { db, auth } from "./firebase";
 import { calculateMonthlySettlement } from "./settlement";
+import { calculateHistoricalMealWork } from "./historicalWork";
 
 const ADMIN_PASSWORD = "8888";
 const ADMIN_DELETE_PIN = "1688";
@@ -404,8 +405,10 @@ export default function App() {
         const dateKey = rowKey.split("_")[1] || "";
         const emp = employeeMap[empKey] || { empId: empKey, name: empKey, store: "未填店名", role: "未設定" };
         const dayRecords = recordsByEmpDate[rowKey] || [];
-        const work = calculateEmployeeWork(dayRecords);
         const meal = mealsByEmpDate[rowKey] || null;
+        const currentWork = calculateEmployeeWork(dayRecords);
+        const historicalWork = dayRecords.length === 0 ? calculateHistoricalMealWork(meal) : null;
+        const work = historicalWork?.canCalculate ? historicalWork : currentWork;
         const hasMeal = Boolean(meal);
         const hasAnyWork = work.hasWorkIn || work.hasWorkOut;
         const workHours = work.canCalculate ? formatHours(work.workHours) : 0;
