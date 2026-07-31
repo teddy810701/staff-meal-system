@@ -3,6 +3,7 @@ import { ref, onValue, set, update, remove } from "firebase/database";
 import { signInAnonymously, onAuthStateChanged } from "firebase/auth";
 import { db, auth } from "./firebase";
 import { calculateMonthlySettlement } from "./settlement";
+import "./App.css";
 
 const ADMIN_PASSWORD = "8888";
 const ADMIN_DELETE_PIN = "1688";
@@ -133,6 +134,9 @@ export default function App() {
   const [employees, setEmployees] = useState([]);
   const [records, setRecords] = useState([]);
   const [mealRecords, setMealRecords] = useState({});
+  const [dataReady, setDataReady] = useState({ employees: false, records: false, meals: false });
+  const [dataError, setDataError] = useState("");
+  const [isConnected, setIsConnected] = useState(true);
 
   const [empId, setEmpId] = useState("");
   const [mealDate, setMealDate] = useState(formatTaipeiDateKey());
@@ -185,6 +189,10 @@ export default function App() {
 
       list.sort((a, b) => String(a.empId || a.id).localeCompare(String(b.empId || b.id)));
       setEmployees(list);
+      setDataReady((current) => ({ ...current, employees: true }));
+      setDataError((current) => current.startsWith("員工資料") ? "" : current);
+    }, (error) => {
+      setDataError(`員工資料同步失敗：${error?.message || "請檢查網路後重試"}`);
     });
   }, [authReady]);
 
@@ -201,6 +209,10 @@ export default function App() {
 
       list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       setRecords(list);
+      setDataReady((current) => ({ ...current, records: true }));
+      setDataError((current) => current.startsWith("打卡資料") ? "" : current);
+    }, (error) => {
+      setDataError(`打卡資料同步失敗：${error?.message || "請檢查網路後重試"}`);
     });
   }, [authReady]);
 
@@ -210,8 +222,27 @@ export default function App() {
     const mealRef = ref(db, "meal_records");
     return onValue(mealRef, (snap) => {
       setMealRecords(snap.val() || {});
+      setDataReady((current) => ({ ...current, meals: true }));
+      setDataError((current) => current.startsWith("員工餐資料") ? "" : current);
+    }, (error) => {
+      setDataError(`員工餐資料同步失敗：${error?.message || "請檢查網路後重試"}`);
     });
   }, [authReady]);
+
+  useEffect(() => {
+    const connectedRef = ref(db, ".info/connected");
+    const handleOnline = () => setIsConnected(true);
+    const handleOffline = () => setIsConnected(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    const unsubscribe = onValue(connectedRef, (snap) => setIsConnected(snap.val() === true));
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
   const matchedEmployee = useMemo(() => {
     const input = normalizeEmpId(empId);
@@ -1125,14 +1156,17 @@ export default function App() {
     setPassword("");
   };
 
-  if (!authReady) {
+  const allDataReady = dataReady.employees && dataReady.records && dataReady.meals;
+
+  if (!authReady || !allDataReady) {
     return (
-      <div style={styles.loadingPage}>
-        <div style={styles.loadingCard}>
+      <div className="loading-page" style={styles.loadingPage}>
+        <div className="loading-card" style={styles.loadingCard}>
           <div style={styles.loadingTitle}>員工餐系統</div>
-          <div style={styles.loadingText}>系統連線中…</div>
-          {authError ? <div style={styles.errorText}>{authError}</div> : null}
-          {authError ? (
+          <div className="loading-dots" aria-hidden="true"><span /><span /><span /></div>
+          <div style={styles.loadingText}>{isConnected ? "正在同步最新資料…" : "目前離線，等待網路恢復…"}</div>
+          {authError || dataError ? <div style={styles.errorText}>{authError || dataError}</div> : null}
+          {authError || dataError ? (
             <button style={styles.retryBtn} onClick={() => window.location.reload()}>
               重新整理
             </button>
@@ -1143,7 +1177,13 @@ export default function App() {
   }
 
   return (
-    <div style={styles.page}>
+    <div className="meal-app-page" style={styles.page}>
+      {!isConnected || dataError ? (
+        <div className={dataError ? "sync-banner sync-banner--error" : "sync-banner"}>
+          <span>{dataError ? "資料同步暫時失敗，目前保留畫面上的既有資料。" : "目前離線，畫面保留最後已載入資料；恢復網路後會自動同步。"}</span>
+          <button onClick={() => window.location.reload()}>重新連線</button>
+        </div>
+      ) : null}
       {editingMeal ? (
         <div style={styles.modalOverlay}>
           <div style={styles.editModalCard}>
@@ -1188,9 +1228,9 @@ export default function App() {
         </div>
       ) : null}
 
-      <div style={styles.appShell}>
-        <header style={styles.topHeader}>
-          <div style={styles.headerLeft}>
+      <div className="meal-app-shell" style={styles.appShell}>
+        <header className="meal-top-header" style={styles.topHeader}>
+          <div className="meal-header-left" style={styles.headerLeft}>
             <div style={styles.appIcon}>🍴</div>
             <div>
               <div style={styles.appTitle}>員工餐記錄系統</div>
@@ -1198,67 +1238,70 @@ export default function App() {
             </div>
           </div>
 
-          <div style={styles.headerRight}>
+          <div className="meal-header-actions" style={styles.headerRight}>
             <input
+              className="meal-date-input"
               type="date"
               style={styles.headerDateInput}
               value={mealDate}
               onChange={(e) => setMealDate(e.target.value)}
             />
 
-            {isAdmin ? (
-              <button style={styles.adminBlueBtn} onClick={logout}>離開管理模式</button>
-            ) : (
-              <>
-                <input
-                  style={styles.passwordInput}
-                  type="password"
-                  placeholder="管理密碼"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") login();
-                  }}
-                />
-                <button style={styles.adminBlueBtn} onClick={login}>管理模式</button>
-              </>
-            )}
-
-            {isManager ? (
-              <button style={styles.managerLogoutBtn} onClick={managerLogout}>{managerStore}店長登出</button>
-            ) : (
-              <>
-                <select
-                  style={styles.managerStoreSelect}
-                  value={managerLoginStore}
-                  onChange={(e) => setManagerLoginStore(e.target.value)}
-                >
-                  <option value="西螺">西螺店長</option>
-                  <option value="斗南">斗南店長</option>
-                </select>
-                <input
-                  style={styles.passwordInput}
-                  type="password"
-                  placeholder="店長密碼"
-                  value={managerPassword}
-                  onChange={(e) => setManagerPassword(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") managerLogin();
-                  }}
-                />
-                <button style={styles.managerBtn} onClick={managerLogin}>店長審核</button>
-              </>
-            )}
+            {isAdmin ? <button className="access-button" style={styles.adminBlueBtn} onClick={logout}>離開管理模式</button> : null}
+            {isManager ? <button className="access-button" style={styles.managerLogoutBtn} onClick={managerLogout}>{managerStore}店長登出</button> : null}
+            {!isAdmin && !isManager ? (
+              <details className="access-menu">
+                <summary>管理／店長登入</summary>
+                <div className="access-menu__panel">
+                  <div className="access-menu__group">
+                    <div className="access-menu__label">系統管理</div>
+                    <input
+                      className="access-input"
+                      style={styles.passwordInput}
+                      type="password"
+                      placeholder="管理密碼"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") login(); }}
+                    />
+                    <button className="access-button" style={styles.adminBlueBtn} onClick={login}>進入管理模式</button>
+                  </div>
+                  <div className="access-menu__group">
+                    <div className="access-menu__label">店長審核</div>
+                    <select
+                      className="access-input"
+                      style={styles.managerStoreSelect}
+                      value={managerLoginStore}
+                      onChange={(e) => setManagerLoginStore(e.target.value)}
+                    >
+                      <option value="西螺">西螺店長</option>
+                      <option value="斗南">斗南店長</option>
+                    </select>
+                    <input
+                      className="access-input"
+                      style={styles.passwordInput}
+                      type="password"
+                      placeholder="店長密碼"
+                      value={managerPassword}
+                      onChange={(e) => setManagerPassword(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") managerLogin(); }}
+                    />
+                    <button className="access-button access-button--manager" style={styles.managerBtn} onClick={managerLogin}>進入店長審核</button>
+                  </div>
+                </div>
+              </details>
+            ) : null}
           </div>
         </header>
 
-        <main style={styles.contentArea}>
-          <section style={styles.employeeHero}>
-            <div style={styles.employeeBlock}>
+        <main className="meal-content" style={styles.contentArea}>
+          <section className="employee-hero" style={styles.employeeHero}>
+            <div className="employee-block" style={styles.employeeBlock}>
               <div style={styles.avatarCircle}>👤</div>
               <div>
                 <div style={styles.label}>員工工號</div>
                 <input
+                  className="employee-id-input"
                   style={styles.empInput}
                   value={empId}
                   onChange={(e) => setEmpId(e.target.value)}
@@ -1282,8 +1325,8 @@ export default function App() {
             <div style={styles.heroNotice}>※ 餐費紀錄請在下班後填寫</div>
           </section>
 
-          <section style={styles.overviewCard}>
-            <div style={styles.metricGrid}>
+          <section className="meal-card overview-card" style={styles.overviewCard}>
+            <div className="metric-grid" style={styles.metricGrid}>
               <MetricBox icon="🕘" title="今日工時" value={`${formatHours(workInfo.workHours)} hr`} sub={`${formatTime(workInfo.workInAt)} - ${formatTime(workInfo.workOutAt)}｜休息 ${formatHours(workInfo.breakHours)}hr`} color="#2563eb" />
               <MetricBox icon="💵" title="今日新增補助" value={`${mealCalc.calculatedSubsidy} 元`} sub={mealCalc.needApproval ? "需店長審核，通過後才列入本月補助" : workInfo.workHours >= 6 ? "滿 6 小時以上" : workInfo.workHours >= 4 ? "滿 4 未滿 6 小時" : "未達補貼標準"} color="#16a34a" />
               <MetricBox icon="🍽️" title="今日餐費" value={`${mealCalc.actualMealAmount} 元`} sub="員工實際用餐金額" color="#ea580c" />
@@ -1292,8 +1335,8 @@ export default function App() {
           </section>
 
           {matchedEmployee ? (
-            <section style={styles.employeeMonthCard}>
-              <div style={styles.cardTitleRow}>
+            <section className="meal-card" style={styles.employeeMonthCard}>
+              <div className="card-title-row" style={styles.cardTitleRow}>
                 <div>
                   <div style={styles.cardTitle}>員工個人月結</div>
                   <div style={styles.cardSubTitle}>{employeeMonthSummary.monthKey}｜{matchedEmployee.name} 的個人員工餐紀錄</div>
@@ -1303,7 +1346,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div style={styles.personalSummaryGrid}>
+              <div className="summary-grid" style={styles.personalSummaryGrid}>
                 <MetricSmall title="本月上班天數" value={`${employeeMonthSummary.days} 天`} />
                 <MetricSmall title="本月累積補助" value={`${employeeMonthSummary.totalEarnedSubsidy} 元`} />
                 <MetricSmall title="剩餘補助" value={`${employeeMonthSummary.endingBalance} 元`} />
@@ -1313,8 +1356,8 @@ export default function App() {
             </section>
           ) : null}
 
-          <section style={styles.entryCard}>
-            <div style={styles.cardTitleRow}>
+          <section className="meal-card meal-entry-card" style={styles.entryCard}>
+            <div className="card-title-row" style={styles.cardTitleRow}>
               <div>
                 <div style={styles.cardTitle}>今日實際用餐金額</div>
                 <div style={styles.cardSubTitle}>系統會自動讀取打卡紀錄與工時</div>
@@ -1326,8 +1369,9 @@ export default function App() {
               </div>
             </div>
 
-            <div style={styles.entryRow}>
+            <div className="meal-entry-row" style={styles.entryRow}>
               <input
+                className="meal-amount-input"
                 style={styles.mealInput}
                 type="number"
                 inputMode="decimal"
@@ -1336,7 +1380,7 @@ export default function App() {
                 placeholder="請輸入金額，例如 150"
               />
               <div style={styles.currencyText}>元</div>
-              <button style={styles.saveButton} onClick={submitMeal}>💾 儲存今日餐費</button>
+              <button className="meal-save-button" style={styles.saveButton} onClick={submitMeal}>儲存今日餐費</button>
             </div>
 
             <div style={styles.formulaBox}>
@@ -1359,8 +1403,8 @@ export default function App() {
             {message ? <div style={message.includes("已儲存") ? styles.successBox : styles.warningBox}>{message}</div> : null}
           </section>
 
-          <section style={styles.recordsCard}>
-            <div style={styles.cardTitleRow}>
+          <section className="meal-card" style={styles.recordsCard}>
+            <div className="card-title-row" style={styles.cardTitleRow}>
               <div>
                 <div style={styles.cardTitle}>本月餐費紀錄</div>
                 <div style={styles.cardSubTitle}>最多顯示最近 10 筆</div>
@@ -1373,8 +1417,8 @@ export default function App() {
             {todayMealList.length === 0 ? (
               <div style={styles.emptyText}>目前尚無員工餐紀錄</div>
             ) : (
-              <div style={styles.tableWrap}>
-                <table style={styles.cleanTable}>
+              <div className="responsive-table" style={styles.tableWrap}>
+                <table className="meal-table" style={styles.cleanTable}>
                   <thead>
                     <tr>
                       <th>日期</th>
@@ -1412,8 +1456,8 @@ export default function App() {
           </section>
 
           {isManager ? (
-            <section style={styles.recordsCard}>
-              <div style={styles.cardTitleRow}>
+            <section className="meal-card" style={styles.recordsCard}>
+              <div className="card-title-row" style={styles.cardTitleRow}>
                 <div>
                   <div style={styles.cardTitle}>{managerStore}店長審核</div>
                   <div style={styles.cardSubTitle}>只顯示需要 {managerStore} 店長通過的員工餐資料</div>
@@ -1423,8 +1467,8 @@ export default function App() {
               {managerPendingRecords.length === 0 ? (
                 <div style={styles.emptyText}>目前沒有待審核資料</div>
               ) : (
-                <div style={styles.tableWrap}>
-                  <table style={styles.cleanTable}>
+                <div className="responsive-table" style={styles.tableWrap}>
+                  <table className="meal-table" style={styles.cleanTable}>
                     <thead>
                       <tr>
                         <th>日期</th>
@@ -1470,8 +1514,8 @@ export default function App() {
 
           {isAdmin ? (
             <>
-              <section style={styles.recordsCard}>
-                <div style={styles.cardTitleRow}>
+              <section className="meal-card" style={styles.recordsCard}>
+                <div className="card-title-row" style={styles.cardTitleRow}>
                   <div>
                     <div style={styles.cardTitle}>員工餐審核設定</div>
                     <div style={styles.cardSubTitle}>漏 key 過的員工可改成需店長審核，之後補助須通過才會計入</div>
@@ -1481,8 +1525,8 @@ export default function App() {
                 {employees.length === 0 ? (
                   <div style={styles.emptyText}>目前沒有員工資料</div>
                 ) : (
-                  <div style={styles.tableWrap}>
-                    <table style={styles.cleanTable}>
+                  <div className="responsive-table" style={styles.tableWrap}>
+                    <table className="meal-table" style={styles.cleanTable}>
                       <thead>
                         <tr>
                           <th>員工</th>
@@ -1525,12 +1569,12 @@ export default function App() {
               </section>
 
               <section style={styles.adminCard}>
-                <div style={styles.cardTitleRow}>
+                <div className="card-title-row" style={styles.cardTitleRow}>
                   <div>
                     <div style={styles.cardTitle}>管理模式 Dashboard</div>
                     <div style={styles.cardSubTitle}>用於月底向員工收費統計</div>
                   </div>
-                  <div style={styles.adminControlBar}>
+                  <div className="admin-controls" style={styles.adminControlBar}>
                     <select
                       style={styles.adminSelect}
                       value={adminStoreFilter}
@@ -1549,7 +1593,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div style={styles.dashboardGrid}>
+                <div className="dashboard-grid" style={styles.dashboardGrid}>
                   <DashBox title="今日登記" value={`${adminDashboard.todayCount} 筆`} sub={`餐費 ${adminDashboard.todayMealAmount} 元`} />
                   <DashBox title="今日用餐最高" value={adminDashboard.todayTop ? `${adminDashboard.todayTop.mealAmount} 元` : "0 元"} sub={adminDashboard.todayTop ? `${adminDashboard.todayTop.name}` : "尚無紀錄"} />
                   <DashBox title="本月累積補助" value={`${adminDashboard.monthEarnedSubsidy} 元`} sub={`上班 ${adminDashboard.monthWorkDays} 天｜已使用 ${adminDashboard.monthUsedSubsidy}`} />
@@ -1557,8 +1601,8 @@ export default function App() {
                 </div>
               </section>
 
-              <section style={styles.recordsCard}>
-                <div style={styles.cardTitleRow}>
+              <section className="meal-card" style={styles.recordsCard}>
+                <div className="card-title-row" style={styles.cardTitleRow}>
                   <div>
                     <div style={styles.cardTitle}>店別分帳</div>
                     <div style={styles.cardSubTitle}>{selectedMonth}｜各店員工餐補貼與應收款</div>
@@ -1568,7 +1612,7 @@ export default function App() {
                 {storeSettlementSummary.length === 0 ? (
                   <div style={styles.emptyText}>目前尚無店別分帳資料</div>
                 ) : (
-                  <div style={styles.personalSummaryGrid}>
+                  <div className="summary-grid" style={styles.personalSummaryGrid}>
                     {storeSettlementSummary.map((store) => (
                       <div key={store.store} style={styles.storeSplitCard}>
                         <div style={styles.storeName}>{store.store}</div>
@@ -1584,8 +1628,8 @@ export default function App() {
                 )}
               </section>
 
-              <section style={styles.recordsCard}>
-                <div style={styles.cardTitleRow}>
+              <section className="meal-card" style={styles.recordsCard}>
+                <div className="card-title-row" style={styles.cardTitleRow}>
                   <div>
                     <div style={styles.cardTitle}>月底結算</div>
                     <div style={styles.cardSubTitle}>{selectedMonth}｜{adminStoreFilter}｜用於月底向員工收費統計</div>
@@ -1595,8 +1639,8 @@ export default function App() {
                 {filteredMonthlySummary.length === 0 ? (
                   <div style={styles.emptyText}>{selectedMonth} 尚無結算資料</div>
                 ) : (
-                  <div style={styles.tableWrap}>
-                    <table style={styles.cleanTable}>
+                  <div className="responsive-table" style={styles.tableWrap}>
+                    <table className="meal-table" style={styles.cleanTable}>
                       <thead>
                         <tr>
                           <th>員工</th>
@@ -2489,32 +2533,4 @@ styleTag.textContent = `
 if (!document.getElementById("staff-meal-style")) {
   styleTag.id = "staff-meal-style";
   document.head.appendChild(styleTag);
-}
-
-
-if (window.innerWidth <= 900) {
-  styles.topHeader.flexDirection = "column";
-  styles.topHeader.alignItems = "stretch";
-  styles.headerRight.justifyContent = "stretch";
-  styles.headerDateInput.width = "100%";
-  styles.passwordInput.width = "100%";
-  styles.adminBlueBtn.width = "100%";
-  styles.managerBtn.width = "100%";
-  styles.managerLogoutBtn.width = "100%";
-  styles.managerStoreSelect.width = "100%";
-  styles.employeeHero.flexDirection = "column";
-  styles.employeeHero.alignItems = "stretch";
-  styles.metricGrid.gridTemplateColumns = "1fr 1fr";
-  styles.entryRow.gridTemplateColumns = "1fr";
-  styles.currencyText.display = "none";
-  styles.dashboardGrid.gridTemplateColumns = "1fr";
-  styles.personalSummaryGrid.gridTemplateColumns = "1fr";
-  styles.adminControlBar.flexDirection = "column";
-  styles.adminSelect.width = "100%";
-  styles.monthInput.width = "100%";
-}
-
-if (window.innerWidth >= 768 && window.innerWidth <= 1180) {
-  styles.metricGrid.gridTemplateColumns = "repeat(4, minmax(0, 1fr))";
-  styles.dashboardGrid.gridTemplateColumns = "repeat(4, minmax(0, 1fr))";
 }
