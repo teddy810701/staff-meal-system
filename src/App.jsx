@@ -1374,7 +1374,7 @@ export default function App() {
               <MetricBox icon="🕘" title="今日工時" value={`${formatHours(workInfo.workHours)} hr`} sub={`${formatTime(workInfo.workInAt)} - ${formatTime(workInfo.workOutAt)}｜休息 ${formatHours(workInfo.breakHours)}hr`} color="#2563eb" />
               <MetricBox icon="💵" title="今日新增補助" value={`${mealCalc.calculatedSubsidy} 元`} sub={mealCalc.needApproval ? "需店長審核，通過後才列入本月補助" : workInfo.workHours >= 6 ? "滿 6 小時以上" : workInfo.workHours >= 4 ? "滿 4 未滿 6 小時" : "未達補貼標準"} color="#16a34a" />
               <MetricBox icon="🍽️" title="今日餐費" value={`${mealCalc.actualMealAmount} 元`} sub="員工實際用餐金額" color="#ea580c" />
-              <MetricBox icon="👛" title="本月應繳試算" value={`${employeeMonthSummary.isPaid ? 0 : employeeMonthSummary.totalEmployeePay} 元`} sub="整月餐費與補助統一結算" color="#dc2626" />
+              <MetricBox icon="👛" title="本月應繳（已打九折）" value={`${employeeMonthSummary.isPaid ? 0 : employeeMonthSummary.totalEmployeePay} 元`} sub="整月超額九折後的應繳金額" color="#dc2626" />
             </div>
           </section>
 
@@ -1394,7 +1394,7 @@ export default function App() {
                 <MetricSmall title="本月上班天數" value={`${employeeMonthSummary.days} 天`} />
                 <MetricSmall title="本月累積補助" value={`${employeeMonthSummary.totalEarnedSubsidy} 元`} />
                 <MetricSmall title="剩餘補助" value={`${employeeMonthSummary.endingBalance} 元`} />
-                <MetricSmall title="本月應繳多少" value={`${employeeMonthSummary.isPaid ? 0 : employeeMonthSummary.totalEmployeePay} 元`} danger />
+                <MetricSmall title="本月應繳（已打九折）" value={`${employeeMonthSummary.isPaid ? 0 : employeeMonthSummary.totalEmployeePay} 元`} danger />
               </div>
 
             </section>
