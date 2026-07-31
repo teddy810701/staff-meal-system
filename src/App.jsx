@@ -1370,6 +1370,44 @@ export default function App() {
         </header>
 
         <main className="meal-content" style={styles.contentArea}>
+          {isAdmin ? (
+            <section className="admin-dashboard-priority" style={styles.adminCard}>
+              <div className="card-title-row" style={styles.cardTitleRow}>
+                <div>
+                  <div style={styles.cardTitle}>管理總覽</div>
+                  <div style={styles.cardSubTitle}>今日登記狀況與本月收費統計</div>
+                </div>
+                <div className="admin-controls" style={styles.adminControlBar}>
+                  <select
+                    style={styles.adminSelect}
+                    value={adminStoreFilter}
+                    onChange={(e) => setAdminStoreFilter(e.target.value)}
+                  >
+                    {storeOptions.map((storeName) => (
+                      <option key={storeName} value={storeName}>{storeName}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="month"
+                    style={styles.monthInput}
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="dashboard-grid" style={styles.dashboardGrid}>
+                <DashBox title="今日登記" value={`${adminDashboard.todayCount} 筆`} sub={`餐費 ${adminDashboard.todayMealAmount} 元`} />
+                <DashBox title="今日未登記" value={`${workingWithoutMeal.length} 人`} sub="有上班、尚未登記員工餐" highlight={workingWithoutMeal.length > 0} />
+                <DashBox title="今日用餐最高" value={adminDashboard.todayTop ? `${adminDashboard.todayTop.mealAmount} 元` : "0 元"} sub={adminDashboard.todayTop ? `${adminDashboard.todayTop.name}` : "尚無紀錄"} />
+                <DashBox title="本月累積補助" value={`${adminDashboard.monthEarnedSubsidy} 元`} sub={`上班 ${adminDashboard.monthWorkDays} 天｜已使用 ${adminDashboard.monthUsedSubsidy}`} />
+                <DashBox title="本月應收費" value={`${adminDashboard.monthEmployeePay} 元`} sub={adminDashboard.monthTop ? `應收最多：${adminDashboard.monthTop.name} ${adminDashboard.monthTop.employeePay}元` : "尚無紀錄"} highlight />
+              </div>
+            </section>
+          ) : null}
+
+          {!isAdmin ? (
+            <>
           <section className="employee-hero" style={styles.employeeHero}>
             <div className="employee-block" style={styles.employeeBlock}>
               <div style={styles.avatarCircle}>👤</div>
@@ -1477,6 +1515,8 @@ export default function App() {
             ) : null}
             {message ? <div style={message.includes("已儲存") ? styles.successBox : styles.warningBox}>{message}</div> : null}
           </section>
+            </>
+          ) : null}
 
           <section className="meal-card" style={styles.recordsCard}>
             <div className="card-title-row" style={styles.cardTitleRow}>
@@ -1603,13 +1643,13 @@ export default function App() {
             </section>
           ) : null}
 
-          <section style={styles.settleNote}>
+          {!isAdmin ? <section style={styles.settleNote}>
             <div style={styles.noteIcon}>🪙</div>
             <div>
               <div style={styles.noteTitle}>月底結算說明</div>
               <div style={styles.noteText}>每月 1 號～月底為一個結算週期，員工餐補助可於當月內累計使用；月底剩餘補助歸零，不跨月。</div>
             </div>
-          </section>
+          </section> : null}
 
           {isAdmin ? (
             <>
@@ -1670,40 +1710,6 @@ export default function App() {
                   )}
                 </div>
               </details>
-
-              <section style={styles.adminCard}>
-                <div className="card-title-row" style={styles.cardTitleRow}>
-                  <div>
-                    <div style={styles.cardTitle}>管理模式 Dashboard</div>
-                    <div style={styles.cardSubTitle}>用於月底向員工收費統計</div>
-                  </div>
-                  <div className="admin-controls" style={styles.adminControlBar}>
-                    <select
-                      style={styles.adminSelect}
-                      value={adminStoreFilter}
-                      onChange={(e) => setAdminStoreFilter(e.target.value)}
-                    >
-                      {storeOptions.map((storeName) => (
-                        <option key={storeName} value={storeName}>{storeName}</option>
-                      ))}
-                    </select>
-                    <input
-                      type="month"
-                      style={styles.monthInput}
-                      value={selectedMonth}
-                      onChange={(e) => setSelectedMonth(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="dashboard-grid" style={styles.dashboardGrid}>
-                  <DashBox title="今日登記" value={`${adminDashboard.todayCount} 筆`} sub={`餐費 ${adminDashboard.todayMealAmount} 元`} />
-                  <DashBox title="今日未登記" value={`${workingWithoutMeal.length} 人`} sub="有上班、尚未登記員工餐" highlight={workingWithoutMeal.length > 0} />
-                  <DashBox title="今日用餐最高" value={adminDashboard.todayTop ? `${adminDashboard.todayTop.mealAmount} 元` : "0 元"} sub={adminDashboard.todayTop ? `${adminDashboard.todayTop.name}` : "尚無紀錄"} />
-                  <DashBox title="本月累積補助" value={`${adminDashboard.monthEarnedSubsidy} 元`} sub={`上班 ${adminDashboard.monthWorkDays} 天｜已使用 ${adminDashboard.monthUsedSubsidy}`} />
-                  <DashBox title="本月應收費" value={`${adminDashboard.monthEmployeePay} 元`} sub={adminDashboard.monthTop ? `應收最多：${adminDashboard.monthTop.name} ${adminDashboard.monthTop.employeePay}元` : "尚無紀錄"} highlight />
-                </div>
-              </section>
 
               <section className="meal-card" style={styles.recordsCard}>
                 <div className="card-title-row" style={styles.cardTitleRow}>

@@ -31,6 +31,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .store-meal-status-group + .store-meal-status-group { margin-top: 18px; }
 .store-meal-status-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border: 1px solid #bfdbfe; border-bottom: 0; border-radius: 14px 14px 0 0; background: #eff6ff; color: #1e3a8a; font-weight: 900; }
 .store-meal-status-heading span:last-child { color: #475569; font-size: 14px; }
+.admin-dashboard-priority { border: 1px solid #bfdbfe !important; background: linear-gradient(135deg, #eff6ff 0%, #ffffff 72%) !important; }
 .approval-settings { padding: 0 !important; overflow: hidden; }
 .approval-settings__summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 24px; cursor: pointer; list-style: none; }
 .approval-settings__summary::-webkit-details-marker { display: none; }
