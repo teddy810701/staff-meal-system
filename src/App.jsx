@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ref, onValue, set, update, remove } from "firebase/database";
 import { signInAnonymously, onAuthStateChanged } from "firebase/auth";
 import { db, auth } from "./firebase";
-import { calculateMonthlySettlement } from "./settlement";
+import { calculateMonthlySettlement, getMealSubsidy, resolveDailySubsidy } from "./settlement";
 import { exportMealWorkbook } from "./exportMealWorkbook";
 import "./App.css";
 
@@ -63,14 +63,6 @@ const formatHours = (hours) => {
   const value = Number(hours) || 0;
   return Math.round(value * 100) / 100;
 };
-
-const getMealSubsidy = (workHours) => {
-  const hours = Number(workHours) || 0;
-  if (hours < 4) return 0;
-  if (hours < 6) return 60;
-  return 100;
-};
-
 
 const escapeHtml = (value) => String(value ?? "")
   .replace(/&/g, "&amp;")
@@ -507,15 +499,20 @@ export default function App() {
         const work = calculateEmployeeWork(dayRecords);
         const meal = mealsByEmpDate[rowKey] || null;
         const hasMeal = Boolean(meal);
-        const hasAnyWork = work.hasWorkIn || work.hasWorkOut;
-        const workHours = work.canCalculate ? formatHours(work.workHours) : 0;
-        const breakHours = work.canCalculate ? formatHours(work.breakHours) : 0;
-        const dailySubsidy = work.canCalculate ? getMealSubsidy(work.workHours) : 0;
         const mealAmount = hasMeal ? Number(meal.mealAmount) || 0 : 0;
+        const resolvedHistory = resolveDailySubsidy({
+          canCalculateWork: work.canCalculate,
+          calculatedWorkHours: work.workHours,
+          meal,
+        });
+        const hasAnyWork = work.hasWorkIn || work.hasWorkOut || resolvedHistory.restoredFromHistory;
+        const workHours = formatHours(resolvedHistory.workHours);
+        const breakHours = work.canCalculate ? formatHours(work.breakHours) : formatHours(meal?.breakHours);
+        const dailySubsidy = resolvedHistory.subsidy;
         const mealNeedsApproval = Boolean(meal?.approvalRequired);
         const approvalStatus = meal?.approvalStatus || (mealNeedsApproval ? "pending" : "approved");
         const mealApproved = !hasMeal || !mealNeedsApproval || approvalStatus === "approved";
-        const earnedSubsidyAmount = work.canCalculate && mealApproved ? dailySubsidy : 0;
+        const earnedSubsidyAmount = (work.canCalculate || resolvedHistory.restoredFromHistory) && mealApproved ? dailySubsidy : 0;
         const balanceBeforeUse = balance + earnedSubsidyAmount;
         const usedSubsidyAmount = hasMeal && mealApproved ? Math.min(balanceBeforeUse, mealAmount) : 0;
         const unpaidBeforeDiscount = hasMeal ? Math.max(0, mealAmount - usedSubsidyAmount) : 0;
@@ -529,6 +526,7 @@ export default function App() {
         else if (hasMeal) status = "已抵扣";
         if (hasMeal && !hasAnyWork) status = "無上班紀錄";
         if (hasAnyWork && !work.canCalculate) status = "工時異常";
+        if (resolvedHistory.restoredFromHistory && mealApproved) status = "歷史工時已還原";
 
         rows.push({
           key: meal?.key || `${dateKey}_${emp.empId}`,
