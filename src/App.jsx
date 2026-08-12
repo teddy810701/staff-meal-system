@@ -1632,12 +1632,15 @@ export default function App() {
 
         <main className="meal-content" style={styles.contentArea}>
           {isAdmin ? (
-            <section className="admin-dashboard-priority" style={styles.adminCard}>
-              <div className="card-title-row" style={styles.cardTitleRow}>
+            <details className="admin-dashboard-priority approval-settings" style={styles.adminCard}>
+              <summary className="approval-settings__summary">
                 <div>
                   <div style={styles.cardTitle}>管理總覽</div>
                   <div style={styles.cardSubTitle}>今日登記狀況與本月收費統計</div>
                 </div>
+                <span className="approval-settings__toggle" aria-hidden="true">展開</span>
+              </summary>
+              <div className="approval-settings__content">
                 <div className="admin-controls" style={styles.adminControlBar}>
                   <select
                     style={styles.adminSelect}
@@ -1658,7 +1661,6 @@ export default function App() {
                     匯出 {selectedMonth} 收款核對簿
                   </button>
                 </div>
-              </div>
 
               <div className="dashboard-grid" style={styles.dashboardGrid}>
                 <DashBox title="今日登記" value={`${adminDashboard.todayCount} 筆`} sub={`餐費 ${adminDashboard.todayMealAmount} 元`} />
@@ -1667,7 +1669,8 @@ export default function App() {
                 <DashBox title="本月累積補助" value={`${adminDashboard.monthEarnedSubsidy} 元`} sub={`上班 ${adminDashboard.monthWorkDays} 天｜已使用 ${adminDashboard.monthUsedSubsidy}`} />
                 <DashBox title="本月應收費" value={`${adminDashboard.monthEmployeePay} 元`} sub={adminDashboard.monthTop ? `應收最多：${adminDashboard.monthTop.name} ${adminDashboard.monthTop.employeePay}元` : "尚無紀錄"} highlight />
               </div>
-            </section>
+              </div>
+            </details>
           ) : null}
 
           {!isAdmin ? (
@@ -1785,13 +1788,15 @@ export default function App() {
             </>
           ) : null}
 
-          <section className="meal-card" style={styles.recordsCard}>
-            <div className="card-title-row" style={styles.cardTitleRow}>
+          <details className="meal-card approval-settings" style={styles.recordsCard}>
+            <summary className="approval-settings__summary">
               <div>
                 <div style={styles.cardTitle}>本日員工餐輸入狀況</div>
                 <div style={styles.cardSubTitle}>{mealDate}｜依店別顯示所有上班與已輸入人員</div>
               </div>
-            </div>
+              <span className="approval-settings__toggle" aria-hidden="true">展開</span>
+            </summary>
+            <div className="approval-settings__content">
 
             {todayMealStatusGroups.length === 0 ? (
               <div style={styles.emptyText}>本日尚無上班或員工餐資料</div>
@@ -1856,16 +1861,19 @@ export default function App() {
                 </div>
               ))
             )}
-          </section>
+            </div>
+          </details>
 
           {isManager ? (
-            <section className="meal-card" style={styles.recordsCard}>
-              <div className="card-title-row" style={styles.cardTitleRow}>
+            <details className="meal-card approval-settings" style={styles.recordsCard}>
+              <summary className="approval-settings__summary">
                 <div>
                   <div style={styles.cardTitle}>{managerStore}店長審核</div>
                   <div style={styles.cardSubTitle}>只顯示需要 {managerStore} 店長通過的員工餐資料</div>
                 </div>
-              </div>
+                <span className="approval-settings__toggle" aria-hidden="true">展開</span>
+              </summary>
+              <div className="approval-settings__content">
 
               {managerPendingRecords.length === 0 ? (
                 <div style={styles.emptyText}>目前沒有待審核資料</div>
@@ -1904,7 +1912,8 @@ export default function App() {
                   </table>
                 </div>
               )}
-            </section>
+              </div>
+            </details>
           ) : null}
 
           {!isAdmin ? <section style={styles.settleNote}>
@@ -1917,13 +1926,15 @@ export default function App() {
 
           {isAdmin ? (
             <>
-              <section className="meal-card" style={styles.recordsCard}>
-                <div className="card-title-row" style={styles.cardTitleRow}>
+              <details className="meal-card approval-settings" style={styles.recordsCard}>
+                <summary className="approval-settings__summary">
                   <div>
                     <div style={styles.cardTitle}>每月員工餐補助倍率</div>
                     <div style={styles.cardSubTitle}>{selectedMonth}｜1 是全額、0.5 是半額、0 是無補助；變更後整月立即重算</div>
                   </div>
-                </div>
+                  <span className="approval-settings__toggle" aria-hidden="true">展開</span>
+                </summary>
+                <div className="approval-settings__content">
                 {employees.length === 0 ? (
                   <div style={styles.emptyText}>目前沒有員工資料</div>
                 ) : (
@@ -1959,7 +1970,8 @@ export default function App() {
                     </table>
                   </div>
                 )}
-              </section>
+                </div>
+              </details>
 
               <details className="meal-card approval-settings" style={styles.recordsCard}>
                 <summary className="approval-settings__summary">
@@ -2019,8 +2031,8 @@ export default function App() {
                 </div>
               </details>
 
-              <section className="meal-card" style={styles.recordsCard}>
-                <div className="card-title-row" style={styles.cardTitleRow}>
+              <details className="meal-card approval-settings" style={styles.recordsCard}>
+                <summary className="approval-settings__summary">
                   <div>
                     <div style={styles.cardTitle}>有上班但尚未登記員工餐</div>
                     <div style={styles.cardSubTitle}>{mealDate}｜{adminStoreFilter}｜依原始上班打卡即時比對</div>
@@ -2028,7 +2040,9 @@ export default function App() {
                   <div style={workingWithoutMeal.length > 0 ? styles.unpaidBadge : styles.paidBadge}>
                     {workingWithoutMeal.length > 0 ? `${workingWithoutMeal.length} 人待確認` : "皆已確認"}
                   </div>
-                </div>
+                  <span className="approval-settings__toggle" aria-hidden="true">展開</span>
+                </summary>
+                <div className="approval-settings__content">
 
                 {workingWithoutMeal.length === 0 ? (
                   <div style={styles.emptyText}>目前沒有「有上班但未登記員工餐」的人員。</div>
@@ -2058,15 +2072,18 @@ export default function App() {
                     </table>
                   </div>
                 )}
-              </section>
+                </div>
+              </details>
 
-              <section className="meal-card" style={styles.recordsCard}>
-                <div className="card-title-row" style={styles.cardTitleRow}>
+              <details className="meal-card approval-settings" style={styles.recordsCard}>
+                <summary className="approval-settings__summary">
                   <div>
                     <div style={styles.cardTitle}>店別分帳</div>
                     <div style={styles.cardSubTitle}>{selectedMonth}｜各店員工餐補貼與應收款</div>
                   </div>
-                </div>
+                  <span className="approval-settings__toggle" aria-hidden="true">展開</span>
+                </summary>
+                <div className="approval-settings__content">
 
                 {storeSettlementSummary.length === 0 ? (
                   <div style={styles.emptyText}>目前尚無店別分帳資料</div>
@@ -2085,15 +2102,18 @@ export default function App() {
                     ))}
                   </div>
                 )}
-              </section>
+                </div>
+              </details>
 
-              <section className="meal-card" style={styles.recordsCard}>
-                <div className="card-title-row" style={styles.cardTitleRow}>
+              <details className="meal-card approval-settings" style={styles.recordsCard}>
+                <summary className="approval-settings__summary">
                   <div>
                     <div style={styles.cardTitle}>月底結算</div>
                     <div style={styles.cardSubTitle}>{selectedMonth}｜{adminStoreFilter}｜用於月底向員工收費統計</div>
                   </div>
-                </div>
+                  <span className="approval-settings__toggle" aria-hidden="true">展開</span>
+                </summary>
+                <div className="approval-settings__content">
 
                 {filteredMonthlySummary.length === 0 ? (
                   <div style={styles.emptyText}>{selectedMonth} 尚無結算資料</div>
@@ -2149,7 +2169,8 @@ export default function App() {
                     </table>
                   </div>
                 )}
-              </section>
+                </div>
+              </details>
             </>
           ) : null}
         </main>
