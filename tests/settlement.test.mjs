@@ -38,7 +38,9 @@ test("有完整打卡時優先依實際工時計算補助", () => {
     meal: { workHours: 7, subsidyAmount: 100 },
   }), {
     workHours: 5.5,
+    breakHours: 0,
     subsidy: 60,
+    source: "records",
     restoredFromHistory: false,
   });
 });
@@ -50,7 +52,9 @@ test("打卡已刪除時可由歷史工時還原補助", () => {
     meal: { workHours: 4.28, subsidyAmount: 60 },
   }), {
     workHours: 4.28,
+    breakHours: 0,
     subsidy: 60,
+    source: "meal",
     restoredFromHistory: true,
   });
 });
@@ -62,7 +66,9 @@ test("新版歷史紀錄優先採用已封存的計算補助", () => {
     meal: { workHours: 3.5, calculatedSubsidyAmount: 100, subsidyAmount: 0 },
   }), {
     workHours: 3.5,
+    breakHours: 0,
     subsidy: 100,
+    source: "meal",
     restoredFromHistory: true,
   });
 });
@@ -74,7 +80,24 @@ test("最舊紀錄沒有工時時仍可採用已保存補助", () => {
     meal: { subsidyAmount: 100 },
   }), {
     workHours: 0,
+    breakHours: 0,
     subsidy: 100,
+    source: "meal",
+    restoredFromHistory: true,
+  });
+});
+
+test("原始打卡刪除後優先使用月結快照", () => {
+  assert.deepEqual(resolveDailySubsidy({
+    canCalculateWork: false,
+    calculatedWorkHours: 0,
+    snapshot: { recordCount: 4, canCalculate: true, workHours: 7.5, breakHours: 0.5, subsidyAmount: 100 },
+    meal: { workHours: 3, subsidyAmount: 0 },
+  }), {
+    workHours: 7.5,
+    breakHours: 0.5,
+    subsidy: 100,
+    source: "snapshot",
     restoredFromHistory: true,
   });
 });

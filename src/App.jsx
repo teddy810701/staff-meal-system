@@ -134,7 +134,8 @@ export default function App() {
   const [employees, setEmployees] = useState([]);
   const [records, setRecords] = useState([]);
   const [mealRecords, setMealRecords] = useState({});
-  const [dataReady, setDataReady] = useState({ employees: false, records: false, meals: false });
+  const [attendanceSnapshots, setAttendanceSnapshots] = useState({});
+  const [dataReady, setDataReady] = useState({ employees: false, records: false, meals: false, snapshots: false });
   const [dataError, setDataError] = useState("");
   const [isConnected, setIsConnected] = useState(true);
 
@@ -195,6 +196,20 @@ export default function App() {
       setDataError(`員工資料同步失敗：${error?.message || "請檢查網路後重試"}`);
     });
   }, [authReady]);
+
+  useEffect(() => {
+    if (!authReady) return;
+
+    setDataReady((current) => ({ ...current, snapshots: false }));
+    const snapshotRef = ref(db, `monthly_attendance_snapshots/${selectedMonth}/days`);
+    return onValue(snapshotRef, (snap) => {
+      setAttendanceSnapshots(snap.val() || {});
+      setDataReady((current) => ({ ...current, snapshots: true }));
+      setDataError((current) => current.startsWith("月結快照") ? "" : current);
+    }, (error) => {
+      setDataError(`月結快照同步失敗：${error?.message || "請檢查網路後重試"}`);
+    });
+  }, [authReady, selectedMonth]);
 
   useEffect(() => {
     if (!authReady) return;
@@ -477,8 +492,28 @@ export default function App() {
       }
     });
 
+    const snapshotsByEmpDate = {};
+    Object.values(attendanceSnapshots || {}).forEach((snapshot) => {
+      if (!snapshot || typeof snapshot !== "object" || !snapshot.dateKey) return;
+      const empKey = normalizeEmpId(snapshot.empId);
+      if (!empKey) return;
+      snapshotsByEmpDate[`${empKey}_${snapshot.dateKey}`] = snapshot;
+      if (!employeeMap[empKey]) {
+        employeeMap[empKey] = {
+          empId: snapshot.empId || empKey,
+          name: snapshot.name || empKey,
+          store: cleanStoreName(snapshot.store || "未填店名"),
+          role: snapshot.role || "未設定",
+        };
+      }
+    });
+
     const keysByEmp = {};
-    Array.from(new Set([...Object.keys(recordsByEmpDate), ...Object.keys(mealsByEmpDate)])).forEach((rowKey) => {
+    Array.from(new Set([
+      ...Object.keys(recordsByEmpDate),
+      ...Object.keys(snapshotsByEmpDate),
+      ...Object.keys(mealsByEmpDate),
+    ])).forEach((rowKey) => {
       const [empKey] = rowKey.split("_");
       if (!keysByEmp[empKey]) keysByEmp[empKey] = [];
       keysByEmp[empKey].push(rowKey);
@@ -497,17 +532,19 @@ export default function App() {
         const emp = employeeMap[empKey] || { empId: empKey, name: empKey, store: "未填店名", role: "未設定" };
         const dayRecords = recordsByEmpDate[rowKey] || [];
         const work = calculateEmployeeWork(dayRecords);
+        const snapshot = snapshotsByEmpDate[rowKey] || null;
         const meal = mealsByEmpDate[rowKey] || null;
         const hasMeal = Boolean(meal);
         const mealAmount = hasMeal ? Number(meal.mealAmount) || 0 : 0;
         const resolvedHistory = resolveDailySubsidy({
           canCalculateWork: work.canCalculate,
           calculatedWorkHours: work.workHours,
+          snapshot,
           meal,
         });
-        const hasAnyWork = work.hasWorkIn || work.hasWorkOut || resolvedHistory.restoredFromHistory;
+        const hasAnyWork = work.hasWorkIn || work.hasWorkOut || Number(snapshot?.recordCount || 0) > 0 || resolvedHistory.restoredFromHistory;
         const workHours = formatHours(resolvedHistory.workHours);
-        const breakHours = work.canCalculate ? formatHours(work.breakHours) : formatHours(meal?.breakHours);
+        const breakHours = work.canCalculate ? formatHours(work.breakHours) : formatHours(resolvedHistory.breakHours);
         const dailySubsidy = resolvedHistory.subsidy;
         const mealNeedsApproval = Boolean(meal?.approvalRequired);
         const approvalStatus = meal?.approvalStatus || (mealNeedsApproval ? "pending" : "approved");
@@ -526,7 +563,8 @@ export default function App() {
         else if (hasMeal) status = "已抵扣";
         if (hasMeal && !hasAnyWork) status = "無上班紀錄";
         if (hasAnyWork && !work.canCalculate) status = "工時異常";
-        if (resolvedHistory.restoredFromHistory && mealApproved) status = "歷史工時已還原";
+        if (resolvedHistory.source === "snapshot" && mealApproved) status = "月結快照";
+        else if (resolvedHistory.restoredFromHistory && mealApproved) status = "歷史工時已還原";
 
         rows.push({
           key: meal?.key || `${dateKey}_${emp.empId}`,
@@ -536,8 +574,8 @@ export default function App() {
           name: meal?.name || emp.name || emp.empId,
           empId: meal?.empId || emp.empId || empKey,
           role: meal?.role || emp.role || "未設定",
-          workInAt: work.workInAt || meal?.workInAt || 0,
-          workOutAt: work.workOutAt || meal?.workOutAt || 0,
+          workInAt: work.workInAt || snapshot?.workInAt || meal?.workInAt || 0,
+          workOutAt: work.workOutAt || snapshot?.workOutAt || meal?.workOutAt || 0,
           workHours,
           breakHours,
           hasMeal,
@@ -561,7 +599,7 @@ export default function App() {
     return rows
       .filter((item) => adminStoreFilter === "全部" || (item.store || "未填店名") === adminStoreFilter)
       .sort((a, b) => String(b.dateKey || "").localeCompare(String(a.dateKey || "")) || String(a.name || "").localeCompare(String(b.name || ""), "zh-Hant"));
-  }, [employees, records, mealRecords, selectedMonth, adminStoreFilter]);
+  }, [employees, records, mealRecords, attendanceSnapshots, selectedMonth, adminStoreFilter]);
 
   const adminTodayRecords = useMemo(() => {
     return Object.values(mealRecords || {})
@@ -1415,7 +1453,7 @@ export default function App() {
     setPassword("");
   };
 
-  const allDataReady = dataReady.employees && dataReady.records && dataReady.meals;
+  const allDataReady = dataReady.employees && dataReady.records && dataReady.meals && dataReady.snapshots;
 
   if (!authReady || !allDataReady) {
     return (

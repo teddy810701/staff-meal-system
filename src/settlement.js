@@ -22,17 +22,29 @@ export const getMealSubsidy = (workHours) => {
   return 100;
 };
 
-export const resolveDailySubsidy = ({ canCalculateWork, calculatedWorkHours, meal }) => {
+export const resolveDailySubsidy = ({ canCalculateWork, calculatedWorkHours, snapshot, meal }) => {
   if (canCalculateWork) {
     return {
       workHours: Number(calculatedWorkHours) || 0,
+      breakHours: 0,
       subsidy: getMealSubsidy(calculatedWorkHours),
+      source: "records",
       restoredFromHistory: false,
     };
   }
 
+  if (snapshot && typeof snapshot === "object" && Number(snapshot.recordCount || 0) > 0) {
+    return {
+      workHours: Math.max(0, Number(snapshot.workHours) || 0),
+      breakHours: Math.max(0, Number(snapshot.breakHours) || 0),
+      subsidy: snapshot.canCalculate ? Math.max(0, Number(snapshot.subsidyAmount) || 0) : 0,
+      source: "snapshot",
+      restoredFromHistory: true,
+    };
+  }
+
   if (!meal || typeof meal !== "object") {
-    return { workHours: 0, subsidy: 0, restoredFromHistory: false };
+    return { workHours: 0, breakHours: 0, subsidy: 0, source: "none", restoredFromHistory: false };
   }
 
   const hasSavedWorkHours = meal.workHours !== undefined && meal.workHours !== null && meal.workHours !== "";
@@ -41,7 +53,9 @@ export const resolveDailySubsidy = ({ canCalculateWork, calculatedWorkHours, mea
   if (meal.calculatedSubsidyAmount !== undefined && meal.calculatedSubsidyAmount !== null) {
     return {
       workHours: savedWorkHours,
+      breakHours: Math.max(0, Number(meal.breakHours) || 0),
       subsidy: Math.max(0, Number(meal.calculatedSubsidyAmount) || 0),
+      source: "meal",
       restoredFromHistory: true,
     };
   }
@@ -49,7 +63,9 @@ export const resolveDailySubsidy = ({ canCalculateWork, calculatedWorkHours, mea
   if (hasSavedWorkHours) {
     return {
       workHours: savedWorkHours,
+      breakHours: Math.max(0, Number(meal.breakHours) || 0),
       subsidy: getMealSubsidy(savedWorkHours),
+      source: "meal",
       restoredFromHistory: true,
     };
   }
@@ -57,10 +73,12 @@ export const resolveDailySubsidy = ({ canCalculateWork, calculatedWorkHours, mea
   if (meal.subsidyAmount !== undefined && meal.subsidyAmount !== null) {
     return {
       workHours: 0,
+      breakHours: Math.max(0, Number(meal.breakHours) || 0),
       subsidy: Math.max(0, Number(meal.subsidyAmount) || 0),
+      source: "meal",
       restoredFromHistory: true,
     };
   }
 
-  return { workHours: 0, subsidy: 0, restoredFromHistory: false };
+  return { workHours: 0, breakHours: 0, subsidy: 0, source: "none", restoredFromHistory: false };
 };
