@@ -1,6 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculateMonthlySettlement, resolveDailySubsidy } from "../src/settlement.js";
+import { applySubsidyMultiplier, calculateMonthlySettlement, normalizeSubsidyMultiplier, resolveDailySubsidy } from "../src/settlement.js";
+
+test("補助倍率可套用全額、半額與無補助", () => {
+  assert.equal(applySubsidyMultiplier(100, 1), 100);
+  assert.equal(applySubsidyMultiplier(100, 0.5), 50);
+  assert.equal(applySubsidyMultiplier(60, 0.5), 30);
+  assert.equal(applySubsidyMultiplier(100, 0), 0);
+});
+
+test("補助倍率限制在 0 到 1，未設定預設全額", () => {
+  assert.equal(normalizeSubsidyMultiplier(undefined), 1);
+  assert.equal(normalizeSubsidyMultiplier(2), 1);
+  assert.equal(normalizeSubsidyMultiplier(-1), 0);
+});
 
 test("整月補助足夠時不產生應繳", () => {
   assert.deepEqual(calculateMonthlySettlement(2_230, 2_240), {
@@ -71,6 +84,14 @@ test("新版歷史紀錄優先採用已封存的計算補助", () => {
     source: "meal",
     restoredFromHistory: true,
   });
+});
+
+test("有倍率的新紀錄以原始補助重算，避免重複打折", () => {
+  assert.equal(resolveDailySubsidy({
+    canCalculateWork: false,
+    calculatedWorkHours: 0,
+    meal: { workHours: 7, baseSubsidyAmount: 100, calculatedSubsidyAmount: 50, subsidyMultiplier: 0.5 },
+  }).subsidy, 100);
 });
 
 test("最舊紀錄沒有工時時仍可採用已保存補助", () => {

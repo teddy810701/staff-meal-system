@@ -22,6 +22,16 @@ export const getMealSubsidy = (workHours) => {
   return 100;
 };
 
+export const normalizeSubsidyMultiplier = (value) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 1;
+  return Math.min(1, Math.max(0, Math.round(parsed * 1000) / 1000));
+};
+
+export const applySubsidyMultiplier = (amount, multiplier) => (
+  Math.round(Math.max(0, Number(amount) || 0) * normalizeSubsidyMultiplier(multiplier))
+);
+
 export const resolveDailySubsidy = ({ canCalculateWork, calculatedWorkHours, snapshot, meal }) => {
   if (canCalculateWork) {
     return {
@@ -49,6 +59,16 @@ export const resolveDailySubsidy = ({ canCalculateWork, calculatedWorkHours, sna
 
   const hasSavedWorkHours = meal.workHours !== undefined && meal.workHours !== null && meal.workHours !== "";
   const savedWorkHours = hasSavedWorkHours ? Math.max(0, Number(meal.workHours) || 0) : 0;
+
+  if (meal.baseSubsidyAmount !== undefined && meal.baseSubsidyAmount !== null) {
+    return {
+      workHours: savedWorkHours,
+      breakHours: Math.max(0, Number(meal.breakHours) || 0),
+      subsidy: Math.max(0, Number(meal.baseSubsidyAmount) || 0),
+      source: "meal",
+      restoredFromHistory: true,
+    };
+  }
 
   if (meal.calculatedSubsidyAmount !== undefined && meal.calculatedSubsidyAmount !== null) {
     return {

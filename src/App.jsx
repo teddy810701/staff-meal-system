@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ref, onValue, set, update, remove } from "firebase/database";
 import { signInAnonymously, onAuthStateChanged } from "firebase/auth";
 import { db, auth } from "./firebase";
-import { calculateMonthlySettlement, getMealSubsidy, resolveDailySubsidy } from "./settlement";
+import { applySubsidyMultiplier, calculateMonthlySettlement, getMealSubsidy, normalizeSubsidyMultiplier, resolveDailySubsidy } from "./settlement";
 import { exportMealWorkbook } from "./exportMealWorkbook";
 import "./App.css";
 
@@ -135,7 +135,8 @@ export default function App() {
   const [records, setRecords] = useState([]);
   const [mealRecords, setMealRecords] = useState({});
   const [attendanceSnapshots, setAttendanceSnapshots] = useState({});
-  const [dataReady, setDataReady] = useState({ employees: false, records: false, meals: false, snapshots: false });
+  const [subsidyAdjustments, setSubsidyAdjustments] = useState({});
+  const [dataReady, setDataReady] = useState({ employees: false, records: false, meals: false, snapshots: false, adjustments: false });
   const [dataError, setDataError] = useState("");
   const [isConnected, setIsConnected] = useState(true);
 
@@ -194,6 +195,16 @@ export default function App() {
       setDataError((current) => current.startsWith("員工資料") ? "" : current);
     }, (error) => {
       setDataError(`員工資料同步失敗：${error?.message || "請檢查網路後重試"}`);
+    });
+  }, [authReady]);
+
+  useEffect(() => {
+    if (!authReady) return;
+    return onValue(ref(db, "meal_subsidy_adjustments"), (snap) => {
+      setSubsidyAdjustments(snap.val() || {});
+      setDataReady((current) => ({ ...current, adjustments: true }));
+    }, (error) => {
+      setDataError(`補助倍率同步失敗：${error?.message || "請檢查網路後重試"}`);
     });
   }, [authReady]);
 
@@ -272,6 +283,9 @@ export default function App() {
   const selectedEmpKey = matchedEmployee ? matchedEmployee.empId || matchedEmployee.id : "";
   const selectedMealKey = selectedEmpKey ? `${mealDate}_${selectedEmpKey}` : "";
   const existingMealRecord = selectedMealKey ? mealRecords[selectedMealKey] : null;
+  const getSubsidyMultiplier = (monthKey, empKey) => normalizeSubsidyMultiplier(
+    subsidyAdjustments?.[monthKey]?.[normalizeEmpId(empKey)]?.multiplier
+  );
 
   const selectedDayRecords = useMemo(() => {
     if (!selectedEmpKey) return [];
@@ -321,7 +335,9 @@ export default function App() {
       const mealAmountValue = Number(meal?.mealAmount) || 0;
       const mealNeedsApproval = Boolean(meal?.approvalRequired);
       const mealApproved = !meal || !mealNeedsApproval || (meal.approvalStatus || "approved") === "approved";
-      const earnedSubsidy = work.canCalculate && mealApproved ? getMealSubsidy(work.workHours) : 0;
+      const earnedSubsidy = work.canCalculate && mealApproved
+        ? applySubsidyMultiplier(getMealSubsidy(work.workHours), getSubsidyMultiplier(monthKey, empKey))
+        : 0;
       balance += earnedSubsidy;
 
       if (meal && mealApproved) {
@@ -335,9 +351,11 @@ export default function App() {
 
   const mealCalc = useMemo(() => {
     const actualMealAmount = Number(mealAmount) || 0;
-    const calculatedSubsidy = workInfo.subsidy || 0;
+    const baseSubsidy = workInfo.subsidy || 0;
     const needApproval = Boolean(matchedEmployee?.mealApprovalRequired);
     const monthKey = getMonthKeyFromDateKey(mealDate);
+    const subsidyMultiplier = getSubsidyMultiplier(monthKey, selectedEmpKey);
+    const calculatedSubsidy = applySubsidyMultiplier(baseSubsidy, subsidyMultiplier);
     const previousBalance = getEmployeeMonthBalanceBeforeDate(selectedEmpKey, monthKey, mealDate);
     const availableSubsidy = needApproval ? 0 : previousBalance + calculatedSubsidy;
     const subsidy = Math.min(availableSubsidy, actualMealAmount);
@@ -346,6 +364,8 @@ export default function App() {
 
     return {
       actualMealAmount,
+      baseSubsidy,
+      subsidyMultiplier,
       calculatedSubsidy,
       previousBalance,
       availableSubsidy,
@@ -354,7 +374,7 @@ export default function App() {
       employeePay,
       needApproval,
     };
-  }, [mealAmount, workInfo.subsidy, matchedEmployee, selectedEmpKey, mealDate, records, mealRecords]);
+  }, [mealAmount, workInfo.subsidy, matchedEmployee, selectedEmpKey, mealDate, records, mealRecords, subsidyAdjustments]);
 
   const todayMealStatusList = useMemo(() => {
     const employeeById = {};
@@ -545,7 +565,9 @@ export default function App() {
         const hasAnyWork = work.hasWorkIn || work.hasWorkOut || Number(snapshot?.recordCount || 0) > 0 || resolvedHistory.restoredFromHistory;
         const workHours = formatHours(resolvedHistory.workHours);
         const breakHours = work.canCalculate ? formatHours(work.breakHours) : formatHours(resolvedHistory.breakHours);
-        const dailySubsidy = resolvedHistory.subsidy;
+        const baseDailySubsidy = resolvedHistory.subsidy;
+        const subsidyMultiplier = getSubsidyMultiplier(selectedMonth, emp.empId || empKey);
+        const dailySubsidy = applySubsidyMultiplier(baseDailySubsidy, subsidyMultiplier);
         const mealNeedsApproval = Boolean(meal?.approvalRequired);
         const approvalStatus = meal?.approvalStatus || (mealNeedsApproval ? "pending" : "approved");
         const mealApproved = !hasMeal || !mealNeedsApproval || approvalStatus === "approved";
@@ -581,6 +603,8 @@ export default function App() {
           hasMeal,
           hasAnyWork,
           mealAmount,
+          baseSubsidyAmount: baseDailySubsidy,
+          subsidyMultiplier,
           calculatedSubsidyAmount: dailySubsidy,
           earnedSubsidyAmount,
           subsidyAmount: usedSubsidyAmount,
@@ -599,7 +623,7 @@ export default function App() {
     return rows
       .filter((item) => adminStoreFilter === "全部" || (item.store || "未填店名") === adminStoreFilter)
       .sort((a, b) => String(b.dateKey || "").localeCompare(String(a.dateKey || "")) || String(a.name || "").localeCompare(String(b.name || ""), "zh-Hant"));
-  }, [employees, records, mealRecords, attendanceSnapshots, selectedMonth, adminStoreFilter]);
+  }, [employees, records, mealRecords, attendanceSnapshots, subsidyAdjustments, selectedMonth, adminStoreFilter]);
 
   const adminTodayRecords = useMemo(() => {
     return Object.values(mealRecords || {})
@@ -1320,6 +1344,8 @@ export default function App() {
 
       mealAmount: amount,
       calculatedSubsidyAmount: mealCalc.calculatedSubsidy,
+      baseSubsidyAmount: mealCalc.baseSubsidy,
+      subsidyMultiplier: mealCalc.subsidyMultiplier,
       subsidyAmount: mealCalc.subsidy,
       overAmount: mealCalc.overAmount,
       discountRate: 0.9,
@@ -1329,7 +1355,7 @@ export default function App() {
       approvalStore,
       approvalStatus,
 
-      rule: "未滿4小時0元；滿4小時未滿6小時60元；滿6小時以上100元；補助可於當月內累計使用；月底剩餘補助歸零；餘額不足部分打9折；需審核員工須店長通過後才計入補助",
+      rule: "未滿4小時0元；滿4小時未滿6小時60元；滿6小時以上100元；當月補助依個人倍率調整；補助可於當月內累計使用；月底剩餘補助歸零；餘額不足部分打9折；需審核員工須店長通過後才計入補助",
       createdAt: existingMealRecord?.createdAt || now,
       updatedAt: now,
     });
@@ -1393,6 +1419,19 @@ export default function App() {
     }
   };
 
+  const updateSubsidyMultiplier = async (employee, value) => {
+    const empKey = normalizeEmpId(employee.empId || employee.id);
+    const multiplier = normalizeSubsidyMultiplier(value);
+    await set(ref(db, `meal_subsidy_adjustments/${selectedMonth}/${empKey}`), {
+      empId: employee.empId || employee.id,
+      name: employee.name || "",
+      store: employee.store || "",
+      multiplier,
+      updatedAt: Date.now(),
+      updatedBy: "admin",
+    });
+  };
+
   const approveMealRecord = async (item) => {
     const calculatedSubsidy = Number(item.calculatedSubsidyAmount ?? getMealSubsidy(item.workHours)) || 0;
     const mealAmountValue = Number(item.mealAmount) || 0;
@@ -1453,7 +1492,7 @@ export default function App() {
     setPassword("");
   };
 
-  const allDataReady = dataReady.employees && dataReady.records && dataReady.meals && dataReady.snapshots;
+  const allDataReady = dataReady.employees && dataReady.records && dataReady.meals && dataReady.snapshots && dataReady.adjustments;
 
   if (!authReady || !allDataReady) {
     return (
@@ -1653,6 +1692,9 @@ export default function App() {
                     {matchedEmployee.mealApprovalRequired ? (
                       <div style={styles.approvalHint}>此員工需 {matchedEmployee.approvalStore || matchedEmployee.store || "店長"} 審核後才給補助</div>
                     ) : null}
+                    <div style={styles.approvalHint}>
+                      本月補助倍率：{mealCalc.subsidyMultiplier}（{Math.round(mealCalc.subsidyMultiplier * 100)}%）
+                    </div>
                   </>
                 ) : empId.trim() ? (
                   <div style={styles.employeeNotFound}>找不到員工</div>
@@ -1666,7 +1708,7 @@ export default function App() {
           <section className="meal-card overview-card" style={styles.overviewCard}>
             <div className="metric-grid" style={styles.metricGrid}>
               <MetricBox icon="🕘" title="今日工時" value={`${formatHours(workInfo.workHours)} hr`} sub={`${formatTime(workInfo.workInAt)} - ${formatTime(workInfo.workOutAt)}｜休息 ${formatHours(workInfo.breakHours)}hr`} color="#2563eb" />
-              <MetricBox icon="💵" title="今日新增補助" value={`${mealCalc.calculatedSubsidy} 元`} sub={mealCalc.needApproval ? "需店長審核，通過後才列入本月補助" : workInfo.workHours >= 6 ? "滿 6 小時以上" : workInfo.workHours >= 4 ? "滿 4 未滿 6 小時" : "未達補貼標準"} color="#16a34a" />
+              <MetricBox icon="💵" title="今日新增補助" value={`${mealCalc.calculatedSubsidy} 元`} sub={mealCalc.needApproval ? "需店長審核，通過後才列入本月補助" : mealCalc.subsidyMultiplier < 1 ? `原補助 ${mealCalc.baseSubsidy} 元 × ${mealCalc.subsidyMultiplier}` : workInfo.workHours >= 6 ? "滿 6 小時以上" : workInfo.workHours >= 4 ? "滿 4 未滿 6 小時" : "未達補貼標準"} color="#16a34a" />
               <MetricBox icon="🍽️" title="今日餐費" value={`${mealCalc.actualMealAmount} 元`} sub="員工實際用餐金額" color="#ea580c" />
               <MetricBox icon="👛" title="本月應繳（已打九折）" value={`${employeeMonthSummary.isPaid ? 0 : employeeMonthSummary.totalEmployeePay} 元`} sub="整月超額九折後的應繳金額" color="#dc2626" />
             </div>
@@ -1875,6 +1917,50 @@ export default function App() {
 
           {isAdmin ? (
             <>
+              <section className="meal-card" style={styles.recordsCard}>
+                <div className="card-title-row" style={styles.cardTitleRow}>
+                  <div>
+                    <div style={styles.cardTitle}>每月員工餐補助倍率</div>
+                    <div style={styles.cardSubTitle}>{selectedMonth}｜1 是全額、0.5 是半額、0 是無補助；變更後整月立即重算</div>
+                  </div>
+                </div>
+                {employees.length === 0 ? (
+                  <div style={styles.emptyText}>目前沒有員工資料</div>
+                ) : (
+                  <div className="responsive-table" style={styles.tableWrap}>
+                    <table className="meal-table" style={styles.cleanTable}>
+                      <thead><tr><th>員工</th><th>店別</th><th>補助倍率</th><th>補助比例</th></tr></thead>
+                      <tbody>
+                        {employees.map((emp) => {
+                          const multiplier = getSubsidyMultiplier(selectedMonth, emp.empId || emp.id);
+                          return (
+                            <tr key={`multiplier_${emp.id}`}>
+                              <td>{emp.name || "未填姓名"}<br /><span>{emp.empId || emp.id}</span></td>
+                              <td>{emp.store || "未填店名"}</td>
+                              <td>
+                                <select
+                                  style={styles.inlineSelect}
+                                  value={String(multiplier)}
+                                  onChange={(e) => updateSubsidyMultiplier(emp, e.target.value)}
+                                  aria-label={`${emp.name || emp.empId} ${selectedMonth} 補助倍率`}
+                                >
+                                  <option value="1">1（全額）</option>
+                                  <option value="0.75">0.75</option>
+                                  <option value="0.5">0.5（半額）</option>
+                                  <option value="0.25">0.25</option>
+                                  <option value="0">0（無補助）</option>
+                                </select>
+                              </td>
+                              <td>{Math.round(multiplier * 100)}%</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+
               <details className="meal-card approval-settings" style={styles.recordsCard}>
                 <summary className="approval-settings__summary">
                   <div>
